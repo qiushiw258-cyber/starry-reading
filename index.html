@@ -1,0 +1,1157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>星空阅读站 ✦</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=ZCOOL+KuaiLe&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --night-deep: #0a1430; --night: #1a2a52; --night-soft: #2c4a7e;
+  --blue-soft: #7aa3d6; --blue-pale: #c8dcf2;
+  --gold: #FFD966; --gold-deep: #F5B942; --gold-warm: #FFCE5C;
+  --cream: #F5EDD6; --ink: #1a2a52; --ink-soft: #4a5a82;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body { font-family: 'Fredoka','ZCOOL KuaiLe',system-ui,sans-serif; color: var(--ink); min-height: 100vh; overflow-x: hidden; background: var(--night-deep); }
+#root { display: flex; justify-content: center; min-height: 100vh; }
+input::placeholder { color: #8a99b8; }
+input { box-sizing: border-box; }
+@keyframes twinkle    { 0%,100%{opacity:.3;transform:scale(.9)} 50%{opacity:1;transform:scale(1.15)} }
+@keyframes gold-pulse { 0%,100%{opacity:.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.18)} }
+@keyframes sparkle    { 0%,100%{opacity:0;transform:scale(.5)} 50%{opacity:1;transform:scale(1.4)} }
+@keyframes mic-pulse  { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:.9;transform:scale(1.06)} }
+@keyframes mic-ring   { 0%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,217,102,.6)} 70%{transform:scale(1.08);box-shadow:0 0 0 14px rgba(255,217,102,0)} 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,217,102,0)} }
+@keyframes word-pop   { 0%{transform:scale(1);color:var(--ink)} 30%{transform:scale(1.12);color:var(--gold-deep);text-shadow:0 0 12px rgba(255,217,102,.6)} 100%{transform:scale(1);color:var(--ink)} }
+@keyframes eq         { 0%,100%{height:4px} 50%{height:20px} }
+@keyframes wave       { 0%,100%{transform:scaleY(.25)} 50%{transform:scaleY(1)} }
+@keyframes fade-in    { from{opacity:0} to{opacity:1} }
+@keyframes pop-in     { 0%{transform:scale(.6);opacity:0} 100%{transform:scale(1);opacity:1} }
+@keyframes star-appear{ 0%{transform:scale(0) rotate(-30deg);opacity:0} 60%{transform:scale(1.3) rotate(10deg);opacity:1} 100%{transform:scale(1) rotate(0);opacity:1} }
+@keyframes banner-in  { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes scan-sweep { 0%{top:0;opacity:1} 90%{top:90%;opacity:1} 100%{top:90%;opacity:0} }
+@keyframes spin       { to{transform:rotate(360deg)} }
+</style>
+
+<!-- Global SVG gradient defs -->
+<svg width="0" height="0" style="position:absolute;overflow:hidden">
+  <defs>
+    <linearGradient id="g-star-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE9A8"/><stop offset="55%" stop-color="#FFD966"/><stop offset="100%" stop-color="#F5B942"/>
+    </linearGradient>
+    <linearGradient id="g-star-pale" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(200,220,242,.85)"/><stop offset="100%" stop-color="rgba(122,163,214,.6)"/>
+    </linearGradient>
+    <linearGradient id="g-big-star" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE9A8"/><stop offset="60%" stop-color="#FFD966"/><stop offset="100%" stop-color="#F5B942"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+/* ══════════════════════════════════════════════
+   1. 语音系统 — Azure 晓晓神经语音 + Web Speech 兜底
+   ══════════════════════════════════════════════ */
+
+// ★ 第一步：填入你的 Azure 语音服务密钥（见教程）
+const AZURE_KEY    = '__AZURE_KEY__';
+const AZURE_REGION = 'eastasia';
+
+const synth = window.speechSynthesis;
+let _zhVoice = null, _enVoice = null, _azAudio = null;
+
+function escXml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+function stopSpeech() {
+  if (_azAudio) { try { _azAudio.pause(); } catch(e){} _azAudio = null; }
+  if (synth) synth.cancel();
+}
+
+// Azure 晓晓神经语音 — 温柔 gentle 风格，偏慢偏暖
+async function _azureTTS(text, lang = 'zh') {
+  if (!AZURE_KEY || AZURE_KEY === 'YOUR_KEY_HERE') return false;
+  if (_azAudio) { try { _azAudio.pause(); } catch(e){} _azAudio = null; }
+  const ssml = lang === 'zh'
+    ? `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='zh-CN-XiaoxiaoNeural'><mstts:express-as style='gentle'><prosody rate='-5%' pitch='+5%'>${escXml(text)}</prosody></mstts:express-as></voice></speak>`
+    : `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name='en-US-AriaNeural'><prosody rate='-10%' pitch='+3%'>${escXml(text)}</prosody></voice></speak>`;
+  try {
+    const res = await fetch(`https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': AZURE_KEY,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3',
+      },
+      body: ssml,
+    });
+    if (!res.ok) return false;
+    const blob = new Blob([await res.arrayBuffer()], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    return await new Promise(resolve => {
+      const audio = new Audio(url);
+      _azAudio = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); _azAudio = null; resolve(true); };
+      audio.onerror = () => { URL.revokeObjectURL(url); _azAudio = null; resolve(false); };
+      audio.play().catch(() => { URL.revokeObjectURL(url); _azAudio = null; resolve(false); });
+    });
+  } catch(e) { return false; }
+}
+
+function loadVoices() {
+  return new Promise(resolve => {
+    const v = synth.getVoices();
+    if (v.length) { resolve(v); return; }
+    const h = () => resolve(synth.getVoices());
+    synth.addEventListener('voiceschanged', h, { once: true });
+    setTimeout(() => resolve(synth.getVoices()), 2500);
+  });
+}
+async function getZhVoice() {
+  if (_zhVoice) return _zhVoice;
+  const vs = await loadVoices();
+  _zhVoice =
+    vs.find(v => v.name === 'Google 普通话（中国大陆）') ||
+    vs.find(v => /xiaoxiao|晓晓/i.test(v.name) && v.lang.startsWith('zh')) ||
+    vs.find(v => /microsoft.*zh|google.*zh/i.test(v.name)) ||
+    vs.find(v => v.lang === 'zh-CN' && v.localService === false) ||
+    vs.find(v => v.lang === 'zh-CN') ||
+    vs.find(v => v.lang.startsWith('zh')) || null;
+  return _zhVoice;
+}
+async function getEnVoice() {
+  if (_enVoice) return _enVoice;
+  const vs = await loadVoices();
+  _enVoice =
+    vs.find(v => /google us english/i.test(v.name)) ||
+    vs.find(v => /samantha|aria|zira|microsoft.*en/i.test(v.name)) ||
+    vs.find(v => v.lang === 'en-US' && v.localService === false) ||
+    vs.find(v => v.lang === 'en-US') ||
+    vs.find(v => v.lang.startsWith('en')) || null;
+  return _enVoice;
+}
+
+// 中文语音 — 优先 Azure 晓晓，兜底 Web Speech
+async function speak(text, opts = {}) {
+  stopSpeech();
+  if (await _azureTTS(text, 'zh')) return;
+  return new Promise(async resolve => {
+    if (!synth) { resolve(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    const v = await getZhVoice();
+    if (v) u.voice = v;
+    u.lang = 'zh-CN'; u.pitch = opts.pitch ?? 1.08; u.rate = opts.rate ?? 0.90; u.volume = 1.0;
+    u.onend = resolve; u.onerror = resolve;
+    synth.speak(u);
+  });
+}
+
+// 英文绘本朗读 — 优先 Azure Aria，兜底 Web Speech
+async function speakEn(text, opts = {}) {
+  stopSpeech();
+  if (await _azureTTS(text, 'en')) return;
+  return new Promise(async resolve => {
+    if (!synth) { resolve(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    const v = await getEnVoice();
+    if (v) u.voice = v;
+    u.lang = 'en-US'; u.pitch = opts.pitch ?? 1.08; u.rate = opts.rate ?? 0.80; u.volume = 1.0;
+    u.onend = resolve; u.onerror = resolve;
+    synth.speak(u);
+  });
+}
+
+/* ══════════════════════════════════════════════
+   2. 麦克风 / 语音识别
+   ══════════════════════════════════════════════ */
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function listenOnce(lang = 'en-US', ms = 13000) {
+  return new Promise((resolve, reject) => {
+    if (!Recognition) { reject({ error: 'not-supported' }); return; }
+    const rec = new Recognition();
+    rec.lang = lang; rec.continuous = false; rec.interimResults = false; rec.maxAlternatives = 3;
+    let done = false;
+    const finish = fn => { if (!done) { done = true; clearTimeout(t); fn(); } };
+    const t = setTimeout(() => finish(() => resolve('')), ms);
+    rec.onresult = e => finish(() => resolve(Array.from(e.results).map(r => r[0].transcript).join(' ').trim()));
+    rec.onerror  = e => finish(() => e.error === 'no-speech' ? resolve('') : reject(e));
+    try { rec.start(); } catch(e) { finish(() => reject(e)); }
+  });
+}
+
+/* ══════════════════════════════════════════════
+   3. 错误检测
+   ══════════════════════════════════════════════ */
+function normWord(w) { return w.toLowerCase().replace(/[^a-z']/g, ''); }
+function lev(a, b) {
+  if (!a.length) return b.length; if (!b.length) return a.length;
+  const row = Array.from({length: b.length+1}, (_,i) => i);
+  for (let i=1; i<=a.length; i++) {
+    let prev = i;
+    for (let j=1; j<=b.length; j++) {
+      const val = a[i-1]===b[j-1] ? row[j-1] : 1+Math.min(prev,row[j],row[j-1]);
+      row[j-1]=prev; prev=val;
+    }
+    row[b.length]=prev;
+  }
+  return row[b.length];
+}
+function wordsMatch(e, h) {
+  const ev=normWord(e), hv=normWord(h);
+  if (!ev) return true; if (ev===hv) return true;
+  return lev(ev,hv) <= (ev.length<=3?1:2);
+}
+function detectErrors(expected, heard) {
+  const strip = s => s.replace(/["""''.,!?;:()\-]/g,'').trim();
+  const ew = strip(expected).split(/\s+/).filter(Boolean);
+  const hw = strip(heard).split(/\s+/).filter(Boolean);
+  return ew.map((w,i)=>({word:w,index:i,heard:hw[i]||''})).filter(({word,heard})=>!wordsMatch(word,heard));
+}
+
+/* ══════════════════════════════════════════════
+   4. 横竖屏
+   ══════════════════════════════════════════════ */
+function useOrientation() {
+  const get = () => typeof window!=='undefined' && window.innerWidth>window.innerHeight && window.innerHeight>=380;
+  const [land, setLand] = useState(get);
+  useEffect(() => {
+    const on = () => setLand(get());
+    window.addEventListener('resize', on); window.addEventListener('orientationchange', on);
+    return () => { window.removeEventListener('resize',on); window.removeEventListener('orientationchange',on); };
+  }, []);
+  return land;
+}
+
+/* ══════════════════════════════════════════════
+   5. 七日星星 — localStorage 持久化 + 真实星期
+   ══════════════════════════════════════════════ */
+function getTodayIdx() {
+  const d = new Date().getDay(); // 0=Sun
+  return d===0 ? 6 : d-1;       // Mon=0 … Sun=6
+}
+function getWeekKey() {
+  const d = new Date();
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const wk = Math.ceil(((d-jan1)/864e5 + jan1.getDay()+1)/7);
+  return `sr-stars-${d.getFullYear()}-W${wk}`;
+}
+function loadStars() {
+  try { const s=localStorage.getItem(getWeekKey()); return s?JSON.parse(s):Array(7).fill(false); }
+  catch { return Array(7).fill(false); }
+}
+function saveStars(arr) {
+  try { localStorage.setItem(getWeekKey(), JSON.stringify(arr)); } catch {}
+}
+
+/* ══════════════════════════════════════════════
+   6. 书库 — 本地演示书 + Google Books API
+   ══════════════════════════════════════════════ */
+const LOCAL_BOOKS = {
+  "Tom and the Little Star": {
+    icon:"✦", palette:["#1a2a52","#4670a8","#FFD966"],
+    pages:[
+      {en:"One night Tom looked up at the sky.",        zh:"一天晚上，汤姆抬头看天空。"},
+      {en:"A tiny star fell down beside his window.",   zh:"一颗小星星落在他的窗边。"},
+      {en:"Hello little star are you lost?",            zh:"你好，小星星！你迷路了吗？"},
+      {en:"The star smiled and said yes please help me.",zh:"星星笑着说：是的，请帮帮我。"},
+      {en:"Tom held the star and ran to the hill.",     zh:"汤姆抱起星星，跑向小山。"},
+      {en:"He threw it gently back into the sky.",      zh:"他轻轻地把它抛回天空。"},
+    ],
+  },
+  "The Cypress and the Moon": {
+    icon:"🌙", palette:["#0f1a3a","#2c4a7e","#F5EDD6"],
+    pages:[
+      {en:"An old cypress stood tall on the hill.",  zh:"一棵老柏树站在山上。"},
+      {en:"Every night the moon came to visit.",     zh:"每天晚上，月亮都来拜访。"},
+      {en:"Tell me a story said the moon.",          zh:"给我讲个故事吧，月亮说。"},
+      {en:"And the cypress whispered with the wind.",zh:"柏树就和风一起轻声说话。"},
+    ],
+  },
+  "Sunflower Field": {
+    icon:"🌻", palette:["#2c4a7e","#FFCE5C","#F5EDD6"],
+    pages:[
+      {en:"The sun woke up the yellow flowers.", zh:"太阳叫醒了黄色的花。"},
+      {en:"They turned their faces to the sky.", zh:"它们把脸转向天空。"},
+      {en:"Good morning big sun they said.",     zh:"早上好，大太阳！它们说。"},
+    ],
+  },
+};
+
+// Google Books API 搜索（免费，无需 key，CORS 开放）
+async function searchGoogleBooks(q) {
+  try {
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=6&printType=books`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.items) return [];
+    return data.items.map(item => {
+      const info = item.volumeInfo;
+      return {
+        id: item.id,
+        title: info.title || '未知书名',
+        author: info.authors?.[0] || '',
+        cover: (info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '').replace('http:', 'https:'),
+        isbn: info.industryIdentifiers?.find(i=>i.type==='ISBN_13')?.identifier || '',
+        description: info.description || '',
+        isApi: true,
+      };
+    });
+  } catch { return []; }
+}
+
+/* ══════════════════════════════════════════════
+   7. 背景 & 装饰
+   ══════════════════════════════════════════════ */
+function StarryBackground() {
+  const stars = useMemo(() => Array.from({length:36}, ()=>({
+    left:Math.random()*100, top:Math.random()*100,
+    size:Math.random()*1.8+0.5, delay:Math.random()*4,
+    dur:Math.random()*3+2.5, bright:Math.random()>.7,
+  })), []);
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:0,pointerEvents:'none',overflow:'hidden',background:'#0a1430'}}>
+      <div style={{position:'absolute',inset:-20,backgroundImage:"url('starry-night.jpg'),url('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg')",backgroundSize:'cover',backgroundPosition:'center',opacity:.82,filter:'blur(1.5px) saturate(1.1)'}}/>
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse 100% 90% at 50% 50%, transparent 0%, rgba(10,20,48,.15) 70%, rgba(10,20,48,.45) 100%), linear-gradient(180deg,rgba(10,20,48,.05) 0%,transparent 50%,rgba(10,20,48,.25) 100%)'}}/>
+      {stars.map((s,i)=>(
+        <div key={i} style={{position:'absolute',left:s.left+'%',top:s.top+'%',width:s.size,height:s.size,borderRadius:'50%',background:s.bright?'#FFE9A8':'#c8dcf2',boxShadow:s.bright?'0 0 6px rgba(255,233,168,.8)':'0 0 3px rgba(200,220,242,.6)',animation:`twinkle ${s.dur}s ${s.delay}s ease-in-out infinite`}}/>
+      ))}
+    </div>
+  );
+}
+
+function Ornaments() {
+  const c = {fill:'none',stroke:'#FFE9A8',strokeWidth:1.2,strokeLinecap:'round',strokeLinejoin:'round'};
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:1,pointerEvents:'none'}}>
+      <svg width="130" height="130" viewBox="0 0 130 130" style={{position:'absolute',top:10,left:10,opacity:.22}}>
+        <g {...c}><circle cx="55" cy="55" r="12"/><circle cx="55" cy="55" r="6"/>
+          {Array.from({length:12}).map((_,i)=>{const a=(i*Math.PI*2)/12;return <path key={i} d={`M ${55+Math.cos(a)*14} ${55+Math.sin(a)*14} Q ${55+Math.cos(a)*22-Math.sin(a)*5} ${55+Math.sin(a)*22+Math.cos(a)*5} ${55+Math.cos(a)*28} ${55+Math.sin(a)*28}`}/>;})}<path d="M 55 67 Q 50 90 60 115"/>
+        </g>
+      </svg>
+      <svg width="130" height="140" viewBox="0 0 130 140" style={{position:'absolute',top:10,right:10,opacity:.22}}>
+        <g {...c}><path d="M 38 130 Q 32 90 48 50"/><path d="M 60 130 Q 60 90 62 60"/><path d="M 88 130 Q 96 95 80 60"/><path d="M 50 50 Q 42 36 50 28 Q 58 36 50 50 Z"/><path d="M 50 50 Q 38 48 36 38"/><path d="M 50 50 Q 62 48 64 38"/><path d="M 78 60 Q 70 46 78 38 Q 86 46 78 60 Z"/><path d="M 78 60 Q 66 58 64 48"/><path d="M 78 60 Q 90 58 92 48"/></g>
+      </svg>
+      <svg width="170" height="100" viewBox="0 0 170 100" style={{position:'absolute',bottom:10,left:10,opacity:.2}}>
+        <g {...c}><path d="M 0 78 Q 40 70 90 76 T 170 74"/>
+          {[20,50,78,108,138,158].map((x,i)=><g key={i} transform={`translate(${x},${72-(i%2?2:0)})`}><path d="M 0 0 L 0 -32"/><path d="M 0 -24 Q -5 -22 -7 -28"/><path d="M 0 -24 Q 5 -22 7 -28"/><path d="M 0 -18 Q -5 -16 -7 -22"/><path d="M 0 -18 Q 5 -16 7 -22"/><path d="M 0 -12 Q -5 -10 -7 -16"/><path d="M 0 -12 Q 5 -10 7 -16"/></g>)}
+        </g>
+      </svg>
+      <svg width="140" height="130" viewBox="0 0 140 130" style={{position:'absolute',bottom:10,right:10,opacity:.22}}>
+        <g {...c}><path d="M 130 120 Q 90 95 60 70 Q 35 50 12 30"/><path d="M 70 78 Q 80 65 88 50"/>
+          <g transform="translate(60,70)">{Array.from({length:5}).map((_,i)=>{const a=(i*Math.PI*2)/5-Math.PI/2,cx=Math.cos(a)*7,cy=Math.sin(a)*7;return <ellipse key={i} cx={cx} cy={cy} rx="5" ry="3.5" transform={`rotate(${(a*180)/Math.PI+90} ${cx} ${cy})`}/>;})}<circle r="1.6" fill="#FFE9A8" stroke="none"/></g>
+          <g transform="translate(88,48)">{Array.from({length:5}).map((_,i)=>{const a=(i*Math.PI*2)/5-Math.PI/2,cx=Math.cos(a)*5.5,cy=Math.sin(a)*5.5;return <ellipse key={i} cx={cx} cy={cy} rx="4" ry="2.8" transform={`rotate(${(a*180)/Math.PI+90} ${cx} ${cy})`}/>;})}<circle r="1.4" fill="#FFE9A8" stroke="none"/></g>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   8. 共用 UI 组件（布局原样不动）
+   ══════════════════════════════════════════════ */
+function Header({ compact }) {
+  return (
+    <div style={{padding:compact?'16px 22px 14px':'26px 20px 22px',textAlign:'center',zIndex:2,position:'relative'}}>
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",color:'var(--gold)',fontSize:compact?30:38,letterSpacing:3,textShadow:'0 2px 16px rgba(255,217,102,.5), 0 0 32px rgba(255,206,92,.3)',lineHeight:1.1}}>
+        星空阅读站 <span style={{fontSize:'.7em',color:'#FFE9A8'}}>✦</span>
+      </div>
+      <div style={{fontFamily:"'Fredoka',sans-serif",color:'rgba(245,237,214,.75)',fontSize:compact?12:13,fontWeight:500,letterSpacing:3,marginTop:4}}>STARRY · READING · STATION</div>
+    </div>
+  );
+}
+
+function GlassCard({ children, style, padding=22, soft=false, ...rest }) {
+  return (
+    <div style={{background:soft?'rgba(255,255,255,.78)':'rgba(255,255,255,.88)',backdropFilter:'blur(14px) saturate(1.1)',WebkitBackdropFilter:'blur(14px) saturate(1.1)',border:'1px solid rgba(255,255,255,.55)',borderRadius:24,padding,boxShadow:'0 10px 32px rgba(10,20,48,.25), inset 0 1px 0 rgba(255,255,255,.5)',...style}} {...rest}>{children}</div>
+  );
+}
+
+function StarIcon({ filled, size=36 }) {
+  return (
+    <div style={{position:'relative',width:size,height:size,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      {filled&&<><div style={{position:'absolute',inset:-6,background:'radial-gradient(circle, rgba(255,217,102,.65) 0%, rgba(255,217,102,0) 65%)',borderRadius:'50%',animation:'gold-pulse 2.6s ease-in-out infinite'}}/><div style={{position:'absolute',top:2,right:6,width:3,height:3,borderRadius:'50%',background:'#fff',boxShadow:'0 0 4px #FFE9A8',animation:'sparkle 1.8s ease-in-out infinite'}}/></>}
+      <svg width={size-2} height={size-2} viewBox="0 0 24 24" style={{position:'relative'}}>
+        <path d="M12 2.6l2.7 5.9 6.4.7-4.8 4.4 1.4 6.3L12 16.7l-5.7 3.2 1.4-6.3L2.9 9.2l6.4-.7L12 2.6z" fill={`url(#${filled?'g-star-gold':'g-star-pale'})`} stroke={filled?'#E89B1A':'rgba(122,163,214,.8)'} strokeWidth=".8" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
+
+const DAYS=['一','二','三','四','五','六','日'];
+function StarRow({ done, todayIdx, onToggle, compact, locked=false }) {
+  return (
+    <GlassCard padding={compact?'14px 14px 12px':'18px 18px 16px'}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",color:'var(--ink)',fontSize:compact?15:17,whiteSpace:'nowrap'}}>这周阅读星图</div>
+        <div style={{fontFamily:'Fredoka',fontWeight:600,fontSize:13,color:'var(--ink-soft)'}}>{done.filter(Boolean).length} / 7 ✦</div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+        {DAYS.map((d,i)=>(
+          <button key={i} onClick={()=>!locked&&onToggle(i)} style={{background:'transparent',border:'none',padding:'6px 2px 4px',borderRadius:14,cursor:locked?'default':'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:4,transition:'transform .15s',position:'relative'}}
+            onMouseDown={!locked?e=>e.currentTarget.style.transform='scale(.92)':null}
+            onMouseUp={!locked?e=>e.currentTarget.style.transform='':null}
+            onMouseLeave={!locked?e=>e.currentTarget.style.transform='':null}
+          >
+            <StarIcon filled={done[i]} size={compact?30:36}/>
+            <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:compact?12:13,color:i===todayIdx?'var(--gold-deep)':'var(--ink-soft)',fontWeight:i===todayIdx?700:400}}>{d}</div>
+            {i===todayIdx&&<div style={{position:'absolute',bottom:-2,width:18,height:3,borderRadius:2,background:'var(--gold-deep)'}}/>}
+          </button>
+        ))}
+      </div>
+      <div style={{marginTop:10,textAlign:'center',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:11,color:'var(--ink-soft)',opacity:.7}}>
+        ✦ 完整读完一本绘本，今日星星才会点亮
+      </div>
+    </GlassCard>
+  );
+}
+
+function MicWidget({ status }) {
+  const M={
+    off:     {bg:'rgba(170,180,200,.2)', border:'rgba(200,210,230,.3)', icon:'🎙️', text:'点击「我来读」开始朗读',   tc:'var(--ink-soft)'},
+    active:  {bg:'rgba(255,217,102,.18)',border:'rgba(255,217,102,.5)', icon:'🎤', text:'麦克风就绪，请大声朗读～',tc:'var(--gold-deep)'},
+    listening:{bg:'rgba(255,217,102,.25)',border:'rgba(255,217,102,.7)', icon:'🎤', text:'正在倾听中…',             tc:'var(--gold-deep)'},
+    denied:  {bg:'rgba(255,80,80,.1)',   border:'rgba(255,80,80,.4)',   icon:'🚫', text:'麦克风被拒绝，请在浏览器设置中开启', tc:'#c03333'},
+  };
+  const c=M[status]||M.off;
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:16,background:c.bg,border:`1px solid ${c.border}`,transition:'all .3s'}}>
+      <div style={{fontSize:22,lineHeight:1,animation:status==='listening'?'mic-ring 1.2s ease-out infinite':'none'}}>{c.icon}</div>
+      {status==='listening'&&<div style={{display:'flex',alignItems:'center',gap:3,height:22}}>{[0,.1,.2,.1,0].map((d,i)=><div key={i} style={{width:5,height:22,borderRadius:3,background:'var(--gold-deep)',transformOrigin:'center',animation:`wave .65s ${d}s ease-in-out infinite`}}/>)}</div>}
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:c.tc,lineHeight:1.4}}>{c.text}</div>
+    </div>
+  );
+}
+
+function VoiceBanner({ text }) {
+  if (!text) return null;
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 18px',borderRadius:16,background:'rgba(255,217,102,.14)',border:'1px solid rgba(255,217,102,.38)',animation:'banner-in .3s ease-out'}}>
+      <span style={{fontSize:18,flexShrink:0}}>🔊</span>
+      <span style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink)',lineHeight:1.4}}>{text}</span>
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, sub, active, onClick, kind='normal', disabled=false }) {
+  const S={
+    mic:   {bg:active?'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)':'rgba(255,255,255,.92)', border:active?'#F5B942':'rgba(255,217,102,.8)', text:active?'#5C3A1E':'#9C6F18', shadow:'0 10px 24px rgba(245,185,66,.4)', glow:true},
+    ai:    {bg:active?'linear-gradient(165deg,#7aa3d6,#4670a8 60%,#2c4a7e)':'rgba(255,255,255,.92)', border:active?'#2c4a7e':'rgba(122,163,214,.85)', text:active?'#fff':'#2c4a7e', shadow:'0 10px 24px rgba(44,74,126,.3)'},
+    normal:{bg:'rgba(255,255,255,.88)', border:'rgba(255,255,255,.5)', text:'var(--ink)', shadow:'0 8px 20px rgba(10,20,48,.22)'},
+  }[kind];
+  return (
+    <button onClick={!disabled?onClick:undefined} style={{background:disabled?'rgba(200,210,230,.35)':S.bg, border:`2px solid ${disabled?'rgba(200,210,230,.35)':S.border}`, backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)', borderRadius:20, padding:'14px 12px', cursor:disabled?'not-allowed':'pointer', color:disabled?'rgba(100,120,160,.5)':S.text, fontFamily:"'ZCOOL KuaiLe',sans-serif", boxShadow:disabled?'none':S.shadow, transition:'transform .12s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, minHeight:82, position:'relative', overflow:'visible', opacity:disabled?.55:1}}
+      onMouseDown={!disabled?e=>e.currentTarget.style.transform='translateY(2px)':null}
+      onMouseUp={!disabled?e=>e.currentTarget.style.transform='':null}
+      onMouseLeave={!disabled?e=>e.currentTarget.style.transform='':null}
+    >
+      {S.glow&&!active&&!disabled&&<div style={{position:'absolute',inset:-4,borderRadius:22,background:'radial-gradient(circle, rgba(255,217,102,.4) 0%, rgba(255,217,102,0) 70%)',animation:'mic-pulse 2.4s ease-in-out infinite',pointerEvents:'none'}}/>}
+      <div style={{fontSize:28,lineHeight:1,position:'relative'}}>{icon}</div>
+      <div style={{textAlign:'center',position:'relative'}}>
+        <div style={{fontSize:16,fontWeight:700,lineHeight:1.1,whiteSpace:'nowrap'}}>{label}</div>
+        <div style={{fontFamily:'Fredoka',fontSize:11,fontWeight:500,opacity:.75,marginTop:2,whiteSpace:'nowrap'}}>{sub}</div>
+      </div>
+    </button>
+  );
+}
+
+function EqBars() {
+  return <span style={{display:'inline-flex',gap:3,alignItems:'flex-end',height:20}}>{[0,.15,.3,.45].map((d,i)=><span key={i} style={{display:'inline-block',width:4,borderRadius:2,background:'var(--gold-deep)',animation:`eq .9s ${d}s ease-in-out infinite`}}/>)}</span>;
+}
+
+/* ══════════════════════════════════════════════
+   9. 封面扫描弹窗（摄像头 + BarcodeDetector）
+   ══════════════════════════════════════════════ */
+function CameraScanner({ onFound, onClose }) {
+  const videoRef = useRef();
+  const [phase,   setPhase]   = useState('starting'); // starting|scanning|found|error|no-camera
+  const [result,  setResult]  = useState(null);
+  const [errMsg,  setErrMsg]  = useState('');
+
+  useEffect(() => {
+    let stream, timer, live = true;
+
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:{ideal:1280} } });
+        if (!live) { stream.getTracks().forEach(t=>t.stop()); return; }
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setPhase('scanning');
+        scanLoop();
+      } catch(e) {
+        if (!live) return;
+        if (e.name === 'NotAllowedError') { setErrMsg('摄像头权限被拒绝，请在浏览器设置中允许'); }
+        else { setErrMsg('无法启动摄像头，请手动搜索书名'); }
+        setPhase('error');
+      }
+    };
+
+    const scanLoop = async () => {
+      if (!live) return;
+      // Try BarcodeDetector (Chrome 83+)
+      if ('BarcodeDetector' in window) {
+        try {
+          const det = new BarcodeDetector({ formats:['ean_13','ean_8','qr_code','code_128'] });
+          const tryDetect = async () => {
+            if (!live) return;
+            try {
+              const codes = await det.detect(videoRef.current);
+              if (codes.length > 0) {
+                const raw = codes[0].rawValue;
+                setPhase('found');
+                await speak('发现了条形码！正在联网查找这本书～');
+                const books = await searchGoogleBooks(`isbn:${raw}`);
+                if (!live) return;
+                if (books.length > 0) {
+                  setResult(books[0]);
+                } else {
+                  setErrMsg(`ISBN ${raw} 暂未收录，请搜索书名`);
+                  setPhase('error');
+                }
+                return;
+              }
+            } catch {}
+            if (live) timer = setTimeout(tryDetect, 600);
+          };
+          tryDetect();
+        } catch {
+          setPhase('error');
+          setErrMsg('暂不支持自动识别，请手动搜索书名');
+        }
+      } else {
+        setErrMsg('当前浏览器不支持条码识别，请手动搜索书名');
+        setPhase('error');
+      }
+    };
+
+    startCamera();
+    return () => { live=false; clearTimeout(timer); stream?.getTracks().forEach(t=>t.stop()); };
+  }, []);
+
+  const overlayStyle = { position:'fixed', inset:0, background:'rgba(10,20,48,.85)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', zIndex:80, display:'flex', alignItems:'center', justifyContent:'center', padding:20, animation:'fade-in .3s' };
+  const boxStyle = { background:'rgba(255,255,255,.95)', borderRadius:28, padding:24, maxWidth:360, width:'100%', textAlign:'center', boxShadow:'0 24px 48px rgba(10,20,48,.5)', animation:'pop-in .4s cubic-bezier(.34,1.56,.64,1)' };
+
+  return (
+    <div style={overlayStyle}>
+      <div style={boxStyle}>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--ink)',marginBottom:16}}>
+          {phase==='starting'  && '📷 正在启动摄像头…'}
+          {phase==='scanning'  && '📷 将书的封面条码对准摄像头'}
+          {phase==='found'     && '🔍 正在联网查找…'}
+          {phase==='error'     && '⚠️ ' + errMsg}
+          {result              && `✅ 找到了：${result.title}`}
+        </div>
+
+        {(phase==='starting'||phase==='scanning'||phase==='found')&&!result&&(
+          <div style={{position:'relative',borderRadius:16,overflow:'hidden',marginBottom:16,background:'#000',aspectRatio:'4/3'}}>
+            <video ref={videoRef} style={{width:'100%',display:'block'}} muted playsInline/>
+            {phase==='scanning'&&(
+              <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <div style={{width:'70%',height:'30%',border:'2px solid rgba(255,217,102,.8)',borderRadius:8,position:'relative'}}>
+                  <div style={{position:'absolute',left:0,right:0,height:2,background:'linear-gradient(90deg,transparent,rgba(255,217,102,.9),transparent)',animation:'scan-sweep 2s ease-in-out infinite'}}/>
+                </div>
+              </div>
+            )}
+            {phase==='found'&&(
+              <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.6)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <div style={{width:40,height:40,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
+              </div>
+            )}
+          </div>
+        )}
+
+        {result&&(
+          <div style={{marginBottom:16}}>
+            {result.cover&&<img src={result.cover} style={{height:120,borderRadius:10,boxShadow:'0 6px 16px rgba(0,0,0,.2)',marginBottom:10}} alt="cover"/>}
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:700,fontSize:16,color:'var(--ink)'}}>{result.title}</div>
+            {result.author&&<div style={{fontFamily:'Fredoka',fontSize:13,color:'var(--ink-soft)',marginTop:4}}>{result.author}</div>}
+            <button onClick={()=>onFound(result)} style={{marginTop:14,background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'12px 32px',borderRadius:16,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+              开始阅读 →
+            </button>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{background:'transparent',border:'1px dashed rgba(100,120,160,.4)',borderRadius:12,padding:'6px 20px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:'var(--ink-soft)',cursor:'pointer'}}>
+          关闭，手动搜索
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   10. 首页
+   ══════════════════════════════════════════════ */
+function Greeting() {
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:12,padding:'0 4px'}}>
+      <div style={{width:48,height:48,borderRadius:'50%',background:'radial-gradient(circle at 30% 30%, #FFE9A8, #FFD966 60%, #F5B942)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,boxShadow:'0 0 18px rgba(255,217,102,.5), inset -2px -3px 6px rgba(180,130,30,.3)',flexShrink:0}}>🌙</div>
+      <div>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--cream)',textShadow:'0 1px 4px rgba(0,0,0,.4)'}}>晚上好，小朋友！</div>
+        <div style={{fontFamily:'Fredoka',fontWeight:500,fontSize:13,color:'rgba(245,237,214,.75)',letterSpacing:.5}}>Tonight's reading star awaits ✦</div>
+      </div>
+    </div>
+  );
+}
+
+function PrimaryCard({ onOpenCamera }) {
+  return (
+    <button onClick={onOpenCamera} style={{width:'100%',border:'1px solid rgba(255,255,255,.55)',padding:'24px 22px',borderRadius:28,background:'linear-gradient(165deg, rgba(255,255,255,.94) 0%, rgba(245,237,214,.92) 100%)',color:'var(--ink)',fontFamily:"'ZCOOL KuaiLe',sans-serif",textAlign:'left',cursor:'pointer',boxShadow:'0 16px 36px rgba(10,20,48,.35), inset 0 1px 0 rgba(255,255,255,.8)',position:'relative',overflow:'hidden',transition:'transform .15s',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}
+      onMouseDown={e=>e.currentTarget.style.transform='translateY(2px)'}
+      onMouseUp={e=>e.currentTarget.style.transform=''}
+      onMouseLeave={e=>e.currentTarget.style.transform=''}
+    >
+      <div style={{position:'absolute',top:-20,right:-20,width:130,height:130,borderRadius:'50%',background:'radial-gradient(circle, rgba(255,217,102,.55) 0%, rgba(255,217,102,0) 70%)'}}/>
+      <svg width="64" height="64" viewBox="0 0 64 64" style={{position:'absolute',top:16,right:18}}><path d="M 32 6 L 36 26 L 56 30 L 36 34 L 32 58 L 28 34 L 8 30 L 28 26 Z" fill="url(#g-big-star)" stroke="#F5B942" strokeWidth=".6"/></svg>
+      <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 10px',background:'rgba(26,42,82,.08)',borderRadius:10,fontSize:11,fontFamily:'Fredoka',fontWeight:600,color:'var(--ink-soft)',letterSpacing:1,marginBottom:14}}>SCAN TO READ</div>
+      <div style={{fontSize:26,fontWeight:400,lineHeight:1.3,marginBottom:4}}>📸 拍摄绘本封面</div>
+      <div style={{fontSize:22,fontWeight:400,lineHeight:1.3,color:'var(--ink-soft)'}}>自动识别书籍，开始阅读</div>
+      <div style={{marginTop:14,fontFamily:'Fredoka',fontSize:13,fontWeight:500,color:'var(--ink-soft)',opacity:.85}}>Point your camera at any book cover →</div>
+    </button>
+  );
+}
+
+function SearchBox({ query, setQuery, loading }) {
+  return (
+    <div style={{position:'relative'}}>
+      <div style={{position:'absolute',left:18,top:'50%',transform:'translateY(-50%)',fontSize:16,pointerEvents:'none',color:'var(--ink-soft)'}}>{loading?<span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>⏳</span>:'🔍'}</div>
+      <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索绘本书名…"
+        style={{width:'100%',padding:'15px 18px 15px 44px',borderRadius:18,border:'1px solid rgba(255,255,255,.55)',background:'rgba(255,255,255,.82)',backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)',fontFamily:"'ZCOOL KuaiLe','Fredoka',sans-serif",fontSize:15,color:'var(--ink)',outline:'none',boxShadow:'0 6px 16px rgba(10,20,48,.18)'}}
+        onFocus={e=>e.currentTarget.style.borderColor='var(--gold)'}
+        onBlur={e=>e.currentTarget.style.borderColor='rgba(255,255,255,.55)'}
+      />
+    </div>
+  );
+}
+
+// 本地书卡
+function LocalBookCard({ title, onClick }) {
+  const b = LOCAL_BOOKS[title];
+  return (
+    <button onClick={onClick} style={{background:'transparent',border:'none',padding:0,cursor:'pointer',textAlign:'left'}}>
+      <div style={{width:'100%',aspectRatio:'3/4',borderRadius:14,background:`linear-gradient(165deg,${b.palette[0]} 0%,${b.palette[1]} 60%,${b.palette[2]} 100%)`,boxShadow:'0 8px 18px rgba(10,20,48,.35)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36,color:'#FFE9A8',border:'1px solid rgba(255,255,255,.3)',position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:10,left:12,fontSize:8,color:'#FFE9A8'}}>✦</div>
+        <div style={{position:'absolute',top:22,right:14,fontSize:6,color:'#FFE9A8'}}>✦</div>
+        <div style={{position:'absolute',bottom:14,left:18,fontSize:6,color:'#FFE9A8'}}>✦</div>
+        {b.icon}
+      </div>
+      <div style={{marginTop:6,fontFamily:'Fredoka',fontWeight:600,fontSize:12,color:'var(--cream)',lineHeight:1.25,textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>{title}</div>
+    </button>
+  );
+}
+
+// API 搜索结果书卡
+function ApiBookCard({ book, onClick }) {
+  return (
+    <button onClick={onClick} style={{background:'transparent',border:'none',padding:0,cursor:'pointer',textAlign:'left'}}>
+      <div style={{width:'100%',aspectRatio:'3/4',borderRadius:14,background:'linear-gradient(165deg,#1a2a52,#2c4a7e)',boxShadow:'0 8px 18px rgba(10,20,48,.35)',overflow:'hidden',position:'relative',border:'1px solid rgba(255,255,255,.3)'}}>
+        {book.cover ? (
+          <img src={book.cover} style={{width:'100%',height:'100%',objectFit:'cover'}} alt={book.title} onError={e=>e.target.style.display='none'}/>
+        ) : (
+          <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📖</div>
+        )}
+        <div style={{position:'absolute',top:6,right:6,background:'rgba(255,217,102,.9)',borderRadius:8,padding:'2px 6px',fontFamily:'Fredoka',fontSize:10,fontWeight:700,color:'#5C3A1E'}}>网络</div>
+      </div>
+      <div style={{marginTop:6,fontFamily:'Fredoka',fontWeight:600,fontSize:11,color:'var(--cream)',lineHeight:1.25,textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>{book.title.length>18?book.title.slice(0,16)+'…':book.title}</div>
+    </button>
+  );
+}
+
+function HomeScreen({ isLandscape, onPickBook, onOpenCamera, query, setQuery, starProps }) {
+  const [apiResults, setApiResults] = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const timerRef = useRef();
+
+  // 防抖搜索：本地 + Google Books API
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    if (!query.trim()) { setApiResults([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      const res = await searchGoogleBooks(query.trim());
+      setApiResults(res);
+      setLoading(false);
+    }, 600);
+    return () => clearTimeout(timerRef.current);
+  }, [query]);
+
+  const localMatches = query.trim()
+    ? Object.keys(LOCAL_BOOKS).filter(t => t.toLowerCase().includes(query.toLowerCase()))
+    : Object.keys(LOCAL_BOOKS);
+
+  const hasResults = localMatches.length > 0 || apiResults.length > 0;
+
+  const bookGrid = (
+    <div>
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--cream)',margin:'6px 4px 8px',textShadow:'0 1px 3px rgba(0,0,0,.4)',letterSpacing:1}}>
+        {query.trim() ? (loading ? '搜索中…' : `共找到 ${localMatches.length + apiResults.length} 本`) : '今夜书单 · TONIGHT'}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+        {localMatches.map(t=><LocalBookCard key={t} title={t} onClick={()=>onPickBook({local:true,title:t})}/>)}
+        {apiResults.map(b=><ApiBookCard key={b.id} book={b} onClick={()=>onPickBook({local:false,...b})}/>)}
+        {query.trim() && !hasResults && !loading && (
+          <div style={{gridColumn:'span 3',textAlign:'center',padding:'20px 0',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'rgba(245,237,214,.6)'}}>未找到相关绘本</div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!isLandscape) return (
+    <div style={{padding:'0 16px',display:'flex',flexDirection:'column',gap:16,position:'relative',zIndex:2}}>
+      <Greeting/>
+      <PrimaryCard onOpenCamera={onOpenCamera}/>
+      <SearchBox query={query} setQuery={setQuery} loading={loading}/>
+      {bookGrid}
+      <div style={{height:4}}/>
+      <StarRow {...starProps} locked/>
+    </div>
+  );
+
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'60% 40%',gap:20,padding:'8px 18px 18px',position:'relative',zIndex:2}}>
+      <div style={{display:'flex',flexDirection:'column',gap:16,minWidth:0}}>
+        <Greeting/><PrimaryCard onOpenCamera={onOpenCamera}/>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:14,minWidth:0}}>
+        <SearchBox query={query} setQuery={setQuery} loading={loading}/>
+        <div style={{flex:1,overflowY:'auto'}}>{bookGrid}</div>
+        <StarRow {...starProps} compact locked/>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   11. 阅读页
+   ══════════════════════════════════════════════ */
+function ReadingTopBar({ bookTitle, pageIdx, total, onBack }) {
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+        <button onClick={onBack} style={{background:'rgba(255,255,255,.85)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',border:'1px solid rgba(255,255,255,.5)',width:42,height:42,borderRadius:'50%',fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--ink)',boxShadow:'0 4px 10px rgba(10,20,48,.25)',flexShrink:0}}>←</button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:700,fontSize:16,color:'var(--cream)',textShadow:'0 1px 3px rgba(0,0,0,.5)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{bookTitle}</div>
+          <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:12,color:'rgba(245,237,214,.75)'}}>第 {pageIdx+1} 页 · 共 {total} 页</div>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:4,padding:'0 4px'}}>
+        {Array.from({length:total}).map((_,i)=>(
+          <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<=pageIdx?'linear-gradient(90deg,#FFE9A8,#FFD966)':'rgba(255,255,255,.18)',boxShadow:i<=pageIdx?'0 0 6px rgba(255,217,102,.6)':'none',transition:'all .3s'}}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PageCard({ bookData, page, aiSpeaking, mode, showZh, setShowZh, isLandscape, errorWords=[] }) {
+  const textSize = isLandscape ? 'clamp(22px,2.4vw,30px)' : 'clamp(20px,5vw,26px)';
+  const illoH    = isLandscape ? 'clamp(150px,28vh,240px)' : 140;
+  const local    = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
+  const palette  = local?.palette || ['#1a2a52','#2c4a7e','#FFD966'];
+
+  return (
+    <GlassCard padding={isLandscape?'22px 24px 20px':'24px 22px 22px'} style={{flex:isLandscape?1:'unset',minHeight:isLandscape?0:280,display:'flex',flexDirection:'column'}}>
+      {/* 插图区 */}
+      <div style={{height:illoH,borderRadius:16,background:`linear-gradient(165deg,${palette[0]} 0%,${palette[1]} 60%,${palette[2]} 100%)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isLandscape?'clamp(56px,9vh,88px)':64,color:'#FFE9A8',marginBottom:18,border:'1px solid rgba(255,255,255,.4)',flexShrink:0,position:'relative',overflow:'hidden'}}>
+        {bookData.cover&&<img src={bookData.cover} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.7}} alt="" onError={e=>e.target.style.display='none'}/>}
+        <div style={{position:'absolute',top:16,left:24,fontSize:14,opacity:.8}}>✦</div>
+        <div style={{position:'absolute',top:34,right:40,fontSize:10,opacity:.8}}>✦</div>
+        <div style={{position:'absolute',bottom:22,left:50,fontSize:12,opacity:.8}}>✦</div>
+        <div style={{filter:'drop-shadow(0 4px 10px rgba(0,0,0,.3))',position:'relative'}}>{local?.icon||'📖'}</div>
+      </div>
+
+      {/* 文本 */}
+      <div style={{fontFamily:"'Baloo 2','Fredoka',sans-serif",fontWeight:600,fontSize:textSize,lineHeight:1.45,color:'var(--ink)',textAlign:'center',letterSpacing:.3,flex:isLandscape?1:'unset',display:'flex',alignItems:'center',justifyContent:'center',minHeight:60}}>
+        {page.en ? (
+          <span>{page.en.split(/\s+/).map((w,i)=>{
+            const clean=normWord(w); const isErr=errorWords.includes(clean);
+            return <span key={i}>{i>0&&' '}<span style={{display:'inline-block',borderRadius:6,background:isErr?'rgba(220,60,60,.15)':'transparent',padding:isErr?'1px 4px':'0',color:isErr?'#c03333':'var(--ink)',animation:aiSpeaking?`word-pop 2.2s ${i*.18}s both`:'none',transition:'all .3s'}}>{w}</span></span>;
+          })}</span>
+        ) : (
+          <span style={{fontSize:'clamp(14px,3vw,18px)',color:'var(--ink-soft)',fontFamily:"'ZCOOL KuaiLe',sans-serif"}}>
+            {page.desc || '这本书还在路上，请自由朗读～'}
+          </span>
+        )}
+      </div>
+
+      {/* 中文翻译 */}
+      {page.zh && (
+        <div style={{textAlign:'center',marginTop:14,flexShrink:0}}>
+          <button onClick={()=>setShowZh(s=>!s)} style={{background:showZh?'rgba(255,217,102,.18)':'transparent',border:'1px dashed rgba(74,90,130,.45)',borderRadius:12,padding:'6px 14px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:'var(--ink-soft)',cursor:'pointer'}}>
+            {showZh?'✓ 中文翻译':'看中文 ▾'}
+          </button>
+          {showZh&&<div style={{marginTop:10,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,color:'var(--ink-soft)'}}>{page.zh}</div>}
+        </div>
+      )}
+
+      {mode==='me'&&(
+        <div style={{marginTop:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8,color:'var(--gold-deep)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,flexShrink:0}}>
+          <EqBars/> 正在听你读…
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+/* ── 纠错弹窗 ── */
+function CorrectionOverlay({ word, onDone }) {
+  const [phase, setPhase] = useState('demo');
+  const cancelRef = useRef(false);
+  useEffect(() => {
+    cancelRef.current = false;
+    (async () => {
+      await speak('这里有个小单词可以读得更标准哦，我们一起学一下吧～');
+      if (cancelRef.current) return;
+      await speakEn(word, { rate:.65, pitch:1.1 });
+      if (cancelRef.current) return;
+      await speak('现在轮到你啦，跟着我读一遍～');
+      if (cancelRef.current) return;
+      setPhase('listen');
+      try {
+        const h1 = await listenOnce('en-US', 8000);
+        if (cancelRef.current) return;
+        if (h1 && wordsMatch(word, h1)) {
+          setPhase('ok'); await speak('太棒了！发音越来越标准啦！');
+          if (!cancelRef.current) setTimeout(onDone, 700);
+        } else {
+          await speakEn(word, {rate:.58}); if (cancelRef.current) return;
+          await speak('再试一次，你可以的～'); if (cancelRef.current) return;
+          const h2 = await listenOnce('en-US', 8000);
+          if (cancelRef.current) return;
+          if (h2 && wordsMatch(word, h2)) { setPhase('ok'); await speak('你真棒！'); if (!cancelRef.current) setTimeout(onDone, 600); }
+          else { await speak('没关系，继续加油！'); if (!cancelRef.current) setTimeout(onDone, 600); }
+        }
+      } catch { if (!cancelRef.current) setTimeout(onDone, 400); }
+    })();
+    return () => { cancelRef.current=true; synth?.cancel(); };
+  }, [word]);
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(10,20,48,.75)',backdropFilter:'blur(5px)',WebkitBackdropFilter:'blur(5px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:60,animation:'fade-in .3s',padding:20}}>
+      <div style={{background:'linear-gradient(165deg,rgba(255,255,255,.97),rgba(245,237,214,.95))',backdropFilter:'blur(20px)',borderRadius:28,padding:'30px 28px',textAlign:'center',maxWidth:320,width:'100%',boxShadow:'0 24px 48px rgba(10,20,48,.5)',border:'1px solid rgba(255,255,255,.65)',animation:'pop-in .4s cubic-bezier(.34,1.56,.64,1)'}}>
+        {phase==='ok'?(
+          <><div style={{fontSize:56,marginBottom:10,animation:'star-appear .5s'}}>⭐</div><div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:22,color:'var(--ink)'}}>读对啦！真棒！</div></>
+        ):(
+          <>
+            <div style={{fontSize:12,fontFamily:'Fredoka',fontWeight:600,color:'var(--ink-soft)',letterSpacing:1,marginBottom:10}}>PRACTICE THIS WORD</div>
+            <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:800,fontSize:42,color:'var(--night)',marginBottom:8}}>{word}</div>
+            <div style={{height:32,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:12}}>
+              {phase==='listen'?<div style={{display:'flex',alignItems:'center',gap:4,height:28}}>{[0,.1,.2,.1,0].map((d,i)=><div key={i} style={{width:6,height:28,borderRadius:3,background:'var(--gold-deep)',transformOrigin:'center bottom',animation:`wave .65s ${d}s ease-in-out infinite`}}/>)}</div>:<div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink-soft)'}}>🔊 AI 示范读音…</div>}
+            </div>
+            <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,color:phase==='listen'?'var(--gold-deep)':'var(--ink-soft)',marginBottom:16}}>
+              {phase==='listen'?'🎤 轮到你啦，大声读出来～':'先认真听 AI 读一遍…'}
+            </div>
+            <button onClick={()=>{cancelRef.current=true;synth?.cancel();onDone();}} style={{background:'transparent',border:'1px dashed rgba(100,120,160,.4)',borderRadius:12,padding:'6px 20px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:12,color:'var(--ink-soft)',cursor:'pointer'}}>跳过这个单词</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── 页面完成弹窗 ── */
+function PageDoneOverlay({ isLast, onNext, onReread }) {
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(10,20,48,.65)',backdropFilter:'blur(6px)',WebkitBackdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50,animation:'fade-in .3s',padding:20}}>
+      <div style={{background:'linear-gradient(165deg,rgba(255,255,255,.97),rgba(245,237,214,.95))',backdropFilter:'blur(20px)',borderRadius:28,padding:'30px 26px',textAlign:'center',maxWidth:320,width:'100%',boxShadow:'0 24px 48px rgba(10,20,48,.5)',border:'1px solid rgba(255,255,255,.65)',animation:'pop-in .45s cubic-bezier(.34,1.56,.64,1)'}}>
+        <div style={{fontSize:52,marginBottom:10,filter:'drop-shadow(0 0 16px rgba(255,217,102,.8))'}}>⭐</div>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:22,color:'var(--ink)',marginBottom:6}}>这一页读得真棒！</div>
+        <div style={{fontFamily:'Fredoka',fontSize:13,color:'var(--ink-soft)',marginBottom:22}}>Great job! Keep going ✦</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <button onClick={onReread} style={{padding:'13px',borderRadius:16,border:'1px solid rgba(122,163,214,.8)',background:'rgba(255,255,255,.9)',color:'var(--night-soft)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer'}}>🔄 再读一遍</button>
+          <button onClick={onNext} style={{padding:'13px',borderRadius:16,border:'none',background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+            {isLast?'✦ 读完全书！':'翻到下一页 →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 阅读主屏 ── */
+function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
+  const local     = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
+  const rawPages  = local?.pages || [{en:'', desc:bookData.description||'请自由朗读这本书的内容。', zh:''}];
+  const [pageIdx,    setPageIdx]    = useState(0);
+  const [mode,       setMode]       = useState(null);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [showZh,     setShowZh]     = useState(false);
+  const [micStatus,  setMicStatus]  = useState('off');
+  const [banner,     setBanner]     = useState('');
+  const [errorWords, setErrorWords] = useState([]);
+  const [pending,    setPending]    = useState([]);
+  const [correcting, setCorrecting] = useState(null);
+  const [pageDone,   setPageDone]   = useState(false);
+  const [busy,       setBusy]       = useState(false);
+
+  const total  = rawPages.length;
+  const page   = rawPages[pageIdx];
+  const isLast = pageIdx === total - 1;
+  const isFirst= pageIdx === 0;
+  const freeRead = !page.en; // API 书，没有可对比的文字
+
+  // 每页进入时语音引导
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      await new Promise(r=>setTimeout(r,400));
+      if (!live) return;
+      const msg = '小朋友，现在你可以大声读这一页啦，我会认真听的！';
+      setBanner(msg); await speak(msg); if (live) setBanner('');
+    })();
+    return ()=>{ live=false; };
+  }, [pageIdx]);
+
+  const resetPage = () => {
+    setMode(null); setAiSpeaking(false); setShowZh(false);
+    setMicStatus('off'); setBanner(''); setErrorWords([]);
+    setPending([]); setCorrecting(null); setPageDone(false); setBusy(false);
+  };
+
+  /* AI 领读 */
+  const handleAI = async () => {
+    if (busy) return;
+    setBusy(true); setMode('ai'); setAiSpeaking(true);
+    setBanner('AI 领读中，跟着一起读吧～');
+    const text = page.en || page.desc || bookData.title;
+    await speakEn(text, {rate:.82, pitch:1.05});
+    setAiSpeaking(false); setMode(null); setBanner(''); setBusy(false);
+  };
+
+  /* 我来读 */
+  const handleMe = async () => {
+    if (busy) return;
+    setBusy(true); setMode('me'); setMicStatus('active');
+    setBanner('需要你的麦克风权限，这样我才能听到你读书哦～');
+    await speak('我在听呢，慢慢读～');
+    setMicStatus('listening'); setBanner('正在倾听中…');
+    try {
+      const heard = await listenOnce('en-US', 13000);
+      setMicStatus('off'); setMode(null); setBanner('');
+      if (!heard) { await speak('我好像没有听到，再试一次吧～'); setBusy(false); return; }
+      if (freeRead) {
+        // 没有参考文本，直接鼓励
+        const praise='哇！你读得真棒！继续加油！'; setBanner(praise);
+        await speak(praise); setBanner(''); setPageDone(true);
+      } else {
+        const errs = detectErrors(page.en, heard);
+        if (errs.length===0) {
+          const praise='哇！你读得超流利，太厉害了！这页读得很流畅，进步好大！';
+          setBanner(praise); await speak(praise); setBanner(''); setPageDone(true);
+        } else {
+          setErrorWords(errs.map(e=>normWord(e.word)));
+          setPending([...errs]); setCorrecting(errs[0]);
+        }
+      }
+    } catch(err) {
+      setMicStatus('off'); setMode(null); setBanner('');
+      if (err?.error==='not-allowed'||err?.name==='NotAllowedError') {
+        setMicStatus('denied'); await speak('我听不到你的声音啦，请帮我打开麦克风权限吧～');
+        setBanner('请在浏览器中允许麦克风权限');
+      } else { await speak('出现了小问题，再试一次吧～'); }
+    }
+    setBusy(false);
+  };
+
+  const afterCorrection = async () => {
+    setCorrecting(null);
+    const rest = pending.slice(1);
+    if (rest.length===0) {
+      setErrorWords([]); setPending([]);
+      const msg='错误都改正啦，继续加油！'; setBanner(msg);
+      await speak(msg); setBanner(''); setPageDone(true);
+    } else {
+      setPending(rest); setErrorWords(rest.map(e=>normWord(e.word))); setCorrecting(rest[0]);
+    }
+  };
+
+  const handleNext = () => { setPageDone(false); if (isLast) onFinish(); else { setPageIdx(i=>i+1); resetPage(); } };
+  const handlePrev = () => { if (!isFirst) { setPageIdx(i=>i-1); resetPage(); } };
+  const handleReread = async () => {
+    setPageDone(false); setErrorWords([]); setPending([]);
+    const msg='来，再读一遍，你一定会读得更棒！'; setBanner(msg); await speak(msg); setBanner('');
+  };
+
+  const readBtns = (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <ActionButton icon="🎤" label="我来读" sub="Read aloud" kind="mic" active={mode==='me'} onClick={handleMe} disabled={busy&&mode!=='me'}/>
+      <ActionButton icon="🔊" label="听AI读" sub="Listen"     kind="ai"  active={mode==='ai'} onClick={handleAI} disabled={busy&&mode!=='ai'}/>
+    </div>
+  );
+  const navBtns = (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+      <button onClick={handlePrev} disabled={isFirst} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,255,255,.5)',background:'rgba(255,255,255,.78)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:isFirst?'rgba(74,90,130,.35)':'var(--ink)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:isFirst?'not-allowed':'pointer',opacity:isFirst?.5:1,boxShadow:isFirst?'none':'0 6px 14px rgba(10,20,48,.2)'}}>← 上一页</button>
+      <button onClick={handleNext} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,217,102,.6)',background:isLast?'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)':'linear-gradient(165deg,rgba(255,233,168,.95),rgba(255,217,102,.95))',color:'#5C3A1E',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 18px rgba(245,185,66,.45)',letterSpacing:.5}}>
+        {isLast?'✦ 读完啦':'下一页 →'}
+      </button>
+    </div>
+  );
+
+  const portrait = (
+    <div style={{padding:'0 16px',display:'flex',flexDirection:'column',gap:12,position:'relative',zIndex:2}}>
+      <ReadingTopBar bookTitle={bookData.title} pageIdx={pageIdx} total={total} onBack={onBack}/>
+      <PageCard bookData={bookData} page={page} aiSpeaking={aiSpeaking} mode={mode} showZh={showZh} setShowZh={setShowZh} isLandscape={false} errorWords={errorWords}/>
+      <MicWidget status={micStatus}/>
+      {banner&&<VoiceBanner text={banner}/>}
+      {readBtns}{navBtns}
+      <StarRow {...starProps} locked/>
+    </div>
+  );
+
+  const landscape = (
+    <div style={{display:'grid',gridTemplateColumns:'60% 40%',gap:20,padding:'0 18px 18px',minHeight:'calc(100vh - 100px)',position:'relative',zIndex:2}}>
+      <div style={{display:'flex',flexDirection:'column',minWidth:0}}>
+        <ReadingTopBar bookTitle={bookData.title} pageIdx={pageIdx} total={total} onBack={onBack}/>
+        <PageCard bookData={bookData} page={page} aiSpeaking={aiSpeaking} mode={mode} showZh={showZh} setShowZh={setShowZh} isLandscape={true} errorWords={errorWords}/>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0,paddingTop:4}}>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--cream)',padding:'0 4px',textShadow:'0 1px 3px rgba(0,0,0,.4)',letterSpacing:1}}>朗读方式 · READING</div>
+        {readBtns}<MicWidget status={micStatus}/>{banner&&<VoiceBanner text={banner}/>}{navBtns}
+        <div style={{flex:1}}/><StarRow {...starProps} compact locked/>
+      </div>
+    </div>
+  );
+
+  return (
+    <>{isLandscape?landscape:portrait}
+      {correcting&&<CorrectionOverlay word={correcting.word} onDone={afterCorrection}/>}
+      {pageDone&&<PageDoneOverlay isLast={isLast} onNext={handleNext} onReread={handleReread}/>}
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   12. 庆祝弹窗
+   ══════════════════════════════════════════════ */
+function Celebration({ onClose }) {
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(10,20,48,.75)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:70,animation:'fade-in .3s',padding:20}}>
+      <div style={{background:'linear-gradient(165deg,rgba(255,255,255,.97),rgba(245,237,214,.95))',backdropFilter:'blur(20px)',borderRadius:28,padding:'36px 30px',textAlign:'center',maxWidth:340,width:'100%',boxShadow:'0 24px 48px rgba(10,20,48,.5), 0 0 60px rgba(255,217,102,.3)',border:'1px solid rgba(255,255,255,.65)',animation:'pop-in .5s cubic-bezier(.34,1.56,.64,1)'}}>
+        <div style={{fontSize:72,marginBottom:8,filter:'drop-shadow(0 0 20px rgba(255,217,102,.8))'}}>✦</div>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:26,color:'var(--ink)',marginBottom:4}}>今夜星星点亮！</div>
+        <div style={{fontFamily:'Fredoka',fontWeight:600,color:'var(--gold-deep)',fontSize:16,marginBottom:18,letterSpacing:1}}>A new star is born ✦</div>
+        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink-soft)',marginBottom:22,lineHeight:1.6}}>你读完了一整本绘本<br/>一颗梵高金星加入你的星图 ✨</div>
+        <button onClick={onClose} style={{background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'12px 40px',borderRadius:18,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 18px rgba(245,185,66,.5)',letterSpacing:1}}>继续探索星空</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   13. App 根组件
+   ══════════════════════════════════════════════ */
+function App() {
+  const isLandscape   = useOrientation();
+  const todayIdx      = getTodayIdx();                    // 真实星期几
+  const [screen,      setScreen]     = useState('home');
+  const [bookData,    setBookData]   = useState(null);
+  const [query,       setQuery]      = useState('');
+  const [done,        setDone]       = useState(() => loadStars()); // localStorage 加载
+  const [celebrate,   setCelebrate]  = useState(false);
+  const [showCamera,  setShowCamera] = useState(false);
+
+  // 预加载语音
+  useEffect(() => { loadVoices(); }, []);
+
+  // 每次 done 改变时持久化
+  useEffect(() => { saveStars(done); }, [done]);
+
+  const pickBook = async (data) => {
+    setBookData(data);
+    setScreen('read');
+  };
+
+  const finishReading = async () => {
+    // 点亮今日星星（仅当今日未点亮）
+    if (!done[todayIdx]) {
+      const next = [...done]; next[todayIdx] = true; setDone(next);
+    }
+    await speak('恭喜你！读完了一整本绘本，今天的星星点亮啦！你真的太棒了！');
+    setCelebrate(true);
+  };
+
+  const handleCameraFound = async (apiBook) => {
+    setShowCamera(false);
+    // 如果是我们库里有的书，用本地数据
+    const localMatch = Object.keys(LOCAL_BOOKS).find(t => t.toLowerCase().includes(apiBook.title.toLowerCase().slice(0,8)));
+    if (localMatch) {
+      pickBook({ local:true, title:localMatch });
+    } else {
+      pickBook({ local:false, ...apiBook });
+    }
+  };
+
+  const starProps = {
+    done, todayIdx,
+    onToggle: () => {}, // 锁定：只能通过读完书点亮
+  };
+
+  return (
+    <>
+      <StarryBackground/>
+      <Ornaments/>
+      <div style={{width:'100%',maxWidth:isLandscape?1100:480,minHeight:'100vh',paddingBottom:isLandscape?0:20,display:'flex',flexDirection:'column',position:'relative',zIndex:2}}>
+        <Header compact={isLandscape}/>
+        <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+          {screen==='home'&&(
+            <HomeScreen
+              isLandscape={isLandscape}
+              onPickBook={pickBook}
+              onOpenCamera={()=>setShowCamera(true)}
+              query={query} setQuery={setQuery}
+              starProps={starProps}
+            />
+          )}
+          {screen==='read'&&bookData&&(
+            <ReadingScreen
+              isLandscape={isLandscape}
+              bookData={bookData}
+              onBack={()=>{ setScreen('home'); setBookData(null); }}
+              onFinish={finishReading}
+              starProps={starProps}
+            />
+          )}
+        </div>
+        {celebrate&&<Celebration onClose={()=>{ setCelebrate(false); setScreen('home'); setBookData(null); }}/>}
+      </div>
+
+      {/* 摄像头扫描弹窗 */}
+      {showCamera&&<CameraScanner onFound={handleCameraFound} onClose={()=>setShowCamera(false)}/>}
+
+      <style>{`
+        @keyframes twinkle    { 0%,100%{opacity:.3;transform:scale(.9)} 50%{opacity:1;transform:scale(1.15)} }
+        @keyframes gold-pulse { 0%,100%{opacity:.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.18)} }
+        @keyframes sparkle    { 0%,100%{opacity:0;transform:scale(.5)} 50%{opacity:1;transform:scale(1.4)} }
+        @keyframes mic-pulse  { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:.9;transform:scale(1.06)} }
+        @keyframes mic-ring   { 0%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,217,102,.6)} 70%{transform:scale(1.08);box-shadow:0 0 0 14px rgba(255,217,102,0)} 100%{transform:scale(1)} }
+        @keyframes word-pop   { 0%{transform:scale(1);color:var(--ink)} 30%{transform:scale(1.12);color:var(--gold-deep);text-shadow:0 0 12px rgba(255,217,102,.6)} 100%{transform:scale(1);color:var(--ink)} }
+        @keyframes eq         { 0%,100%{height:4px} 50%{height:20px} }
+        @keyframes wave       { 0%,100%{transform:scaleY(.25)} 50%{transform:scaleY(1)} }
+        @keyframes fade-in    { from{opacity:0} to{opacity:1} }
+        @keyframes pop-in     { 0%{transform:scale(.6);opacity:0} 100%{transform:scale(1);opacity:1} }
+        @keyframes star-appear{ 0%{transform:scale(0) rotate(-30deg);opacity:0} 60%{transform:scale(1.3) rotate(10deg);opacity:1} 100%{transform:scale(1) rotate(0);opacity:1} }
+        @keyframes banner-in  { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes scan-sweep { 0%{top:0;opacity:1} 90%{top:90%;opacity:1} 100%{top:90%;opacity:0} }
+        @keyframes spin       { to{transform:rotate(360deg)} }
+      `}</style>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
