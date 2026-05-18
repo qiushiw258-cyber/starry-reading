@@ -64,6 +64,7 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 // ★ 第一步：填入你的 Azure 语音服务密钥（见教程）
 const AZURE_KEY    = '__AZURE_KEY__';
 const AZURE_REGION = 'eastasia';
+const OPENAI_KEY   = '__OPENAI_KEY__';
 
 const synth = window.speechSynthesis;
 let _zhVoice = null, _enVoice = null, _azAudio = null;
@@ -311,6 +312,87 @@ async function searchGoogleBooks(q) {
 }
 
 /* ══════════════════════════════════════════════
+   6b. OpenAI GPT-4o — 封面识别 / 逐页OCR / AI搜索
+   ══════════════════════════════════════════════ */
+function captureFrame(videoEl, quality=0.85) {
+  const c = document.createElement('canvas');
+  c.width = videoEl.videoWidth || 640; c.height = videoEl.videoHeight || 480;
+  c.getContext('2d').drawImage(videoEl, 0, 0);
+  return c.toDataURL('image/jpeg', quality).split(',')[1];
+}
+
+async function _gptVision(base64, prompt, maxTokens=900) {
+  if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') return null;
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST',
+      headers:{ 'Authorization':`Bearer ${OPENAI_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model:'gpt-4o',
+        messages:[{ role:'user', content:[
+          { type:'image_url', image_url:{ url:`data:image/jpeg;base64,${base64}`, detail:'low' } },
+          { type:'text', text: prompt }
+        ]}],
+        max_tokens: maxTokens,
+        response_format:{ type:'json_object' },
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return JSON.parse(data.choices[0].message.content);
+  } catch(e) { console.warn('GPT Vision:', e); return null; }
+}
+
+async function _gptText(prompt, maxTokens=1000) {
+  if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') return null;
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST',
+      headers:{ 'Authorization':`Bearer ${OPENAI_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model:'gpt-4o',
+        messages:[{ role:'user', content: prompt }],
+        max_tokens: maxTokens,
+        response_format:{ type:'json_object' },
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return JSON.parse(data.choices[0].message.content);
+  } catch(e) { console.warn('GPT Text:', e); return null; }
+}
+
+// 封面识别 → 返回书名 + 页面内容
+async function identifyBookCover(base64) {
+  return _gptVision(base64,
+    `This is a children's picture book cover. Identify it and return JSON:
+{"found":true,"title":"English title","author":"author name","zh_title":"中文书名","description":"2句中文简介适合6-8岁","pages":[{"en":"simple English text page 1","zh":"中文翻译"},{"en":"...","zh":"..."}]}
+Include 4-6 pages with simple English. If not a children's book return {"found":false,"title":"","author":"","description":"","pages":[]}`
+  );
+}
+
+// 书页OCR → 提取文字 + 翻译
+async function scanPagePhoto(base64) {
+  return _gptVision(base64,
+    `This is a page from a children's picture book. Return JSON:
+{"en":"exact English text from the page (empty string if no text)","zh":"Chinese translation of the text","scene":"用一句中文描述画面内容"}`,
+    400
+  );
+}
+
+// AI书名搜索 → 生成绘本内容
+async function searchBookByAI(title) {
+  const r = await _gptText(
+    `Children's picture book reading app. Book: "${title}".
+If you know this book provide real content, otherwise create content for this title.
+Return JSON: {"title":"${title}","author":"","zh_title":"中文书名","description":"中文简介","pages":[{"en":"English text page 1 (simple, 5-8yr old level)","zh":"中文翻译"},{"en":"...","zh":"..."}]}
+Include 4-8 pages. English must be simple sentences.`
+  );
+  if (r) return { ...r, isAI:true, isApi:true, id:`ai-${Date.now()}`, pages: r.pages||[] };
+  return null;
+}
+
+/* ══════════════════════════════════════════════
    7. 背景 & 装饰
    ══════════════════════════════════════════════ */
 function StarryBackground() {
@@ -474,119 +556,118 @@ function EqBars() {
    ══════════════════════════════════════════════ */
 function CameraScanner({ onFound, onClose }) {
   const videoRef = useRef();
-  const [phase,   setPhase]   = useState('starting'); // starting|scanning|found|error|no-camera
-  const [result,  setResult]  = useState(null);
-  const [errMsg,  setErrMsg]  = useState('');
+  const [phase,  setPhase]  = useState('starting'); // starting|ready|processing|error
+  const [result, setResult] = useState(null);
+  const [hint,   setHint]   = useState('将书的封面对准摄像头，然后拍照');
 
   useEffect(() => {
-    let stream, timer, live = true;
+    let stream, bcTimer, live = true;
 
-    const startCamera = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:{ideal:1280} } });
-        if (!live) { stream.getTracks().forEach(t=>t.stop()); return; }
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setPhase('scanning');
-        scanLoop();
-      } catch(e) {
-        if (!live) return;
-        if (e.name === 'NotAllowedError') { setErrMsg('摄像头权限被拒绝，请在浏览器设置中允许'); }
-        else { setErrMsg('无法启动摄像头，请手动搜索书名'); }
-        setPhase('error');
-      }
-    };
-
-    const scanLoop = async () => {
-      if (!live) return;
-      // Try BarcodeDetector (Chrome 83+)
-      if ('BarcodeDetector' in window) {
-        try {
-          const det = new BarcodeDetector({ formats:['ean_13','ean_8','qr_code','code_128'] });
-          const tryDetect = async () => {
-            if (!live) return;
+    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
+      .then(s => {
+        if (!live) { s.getTracks().forEach(t=>t.stop()); return; }
+        stream = s;
+        videoRef.current.srcObject = s;
+        videoRef.current.play();
+        setPhase('ready');
+        // 后台静默扫条形码
+        if ('BarcodeDetector' in window) {
+          const det = new BarcodeDetector({ formats:['ean_13','ean_8','code_128'] });
+          const loop = async () => {
+            if (!live || phase === 'processing') return;
             try {
               const codes = await det.detect(videoRef.current);
-              if (codes.length > 0) {
-                const raw = codes[0].rawValue;
-                setPhase('found');
-                await speak('发现了条形码！正在联网查找这本书～');
-                const books = await searchGoogleBooks(`isbn:${raw}`);
+              if (codes.length && live) {
+                setPhase('processing'); setHint('发现条形码，查找中…');
+                const books = await searchGoogleBooks(`isbn:${codes[0].rawValue}`);
                 if (!live) return;
-                if (books.length > 0) {
-                  setResult(books[0]);
-                } else {
-                  setErrMsg(`ISBN ${raw} 暂未收录，请搜索书名`);
-                  setPhase('error');
-                }
+                if (books.length) { setResult(books[0]); return; }
+                setHint('条码未收录，请拍封面识别');
+                setPhase('ready');
                 return;
               }
             } catch {}
-            if (live) timer = setTimeout(tryDetect, 600);
+            if (live) bcTimer = setTimeout(loop, 800);
           };
-          tryDetect();
-        } catch {
-          setPhase('error');
-          setErrMsg('暂不支持自动识别，请手动搜索书名');
+          bcTimer = setTimeout(loop, 1200);
         }
-      } else {
-        setErrMsg('当前浏览器不支持条码识别，请手动搜索书名');
+      })
+      .catch(e => {
+        if (!live) return;
+        setHint(e.name==='NotAllowedError' ? '请允许摄像头权限后重试' : '无法启动摄像头，请搜索书名');
         setPhase('error');
-      }
-    };
+      });
 
-    startCamera();
-    return () => { live=false; clearTimeout(timer); stream?.getTracks().forEach(t=>t.stop()); };
+    return () => { live=false; clearTimeout(bcTimer); stream?.getTracks().forEach(t=>t.stop()); };
   }, []);
 
-  const overlayStyle = { position:'fixed', inset:0, background:'rgba(10,20,48,.85)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', zIndex:80, display:'flex', alignItems:'center', justifyContent:'center', padding:20, animation:'fade-in .3s' };
-  const boxStyle = { background:'rgba(255,255,255,.95)', borderRadius:28, padding:24, maxWidth:360, width:'100%', textAlign:'center', boxShadow:'0 24px 48px rgba(10,20,48,.5)', animation:'pop-in .4s cubic-bezier(.34,1.56,.64,1)' };
+  const handleCapture = async () => {
+    if (phase !== 'ready') return;
+    setPhase('processing'); setHint('AI 正在识别封面…');
+    await speak('让我来认一认这本书～');
+    const base64 = captureFrame(videoRef.current);
+    const info = await identifyBookCover(base64);
+    if (!info || !info.found || !info.title) {
+      setHint('未能识别，请重试或搜索书名'); setPhase('ready'); return;
+    }
+    setResult({ title:info.title, author:info.author||'', zh_title:info.zh_title||'',
+      description:info.description||'', pages:info.pages||[], isAI:true, id:`ai-${Date.now()}` });
+  };
+
+  const ov = { position:'fixed', inset:0, background:'rgba(10,20,48,.88)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', zIndex:80, display:'flex', alignItems:'center', justifyContent:'center', padding:20, animation:'fade-in .3s' };
+  const bx = { background:'rgba(255,255,255,.96)', borderRadius:28, padding:24, maxWidth:360, width:'100%', textAlign:'center', boxShadow:'0 24px 48px rgba(10,20,48,.5)', animation:'pop-in .4s cubic-bezier(.34,1.56,.64,1)' };
 
   return (
-    <div style={overlayStyle}>
-      <div style={boxStyle}>
-        <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--ink)',marginBottom:16}}>
-          {phase==='starting'  && '📷 正在启动摄像头…'}
-          {phase==='scanning'  && '📷 将书的封面条码对准摄像头'}
-          {phase==='found'     && '🔍 正在联网查找…'}
-          {phase==='error'     && '⚠️ ' + errMsg}
-          {result              && `✅ 找到了：${result.title}`}
-        </div>
-
-        {(phase==='starting'||phase==='scanning'||phase==='found')&&!result&&(
-          <div style={{position:'relative',borderRadius:16,overflow:'hidden',marginBottom:16,background:'#000',aspectRatio:'4/3'}}>
-            <video ref={videoRef} style={{width:'100%',display:'block'}} muted playsInline/>
-            {phase==='scanning'&&(
-              <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <div style={{width:'70%',height:'30%',border:'2px solid rgba(255,217,102,.8)',borderRadius:8,position:'relative'}}>
-                  <div style={{position:'absolute',left:0,right:0,height:2,background:'linear-gradient(90deg,transparent,rgba(255,217,102,.9),transparent)',animation:'scan-sweep 2s ease-in-out infinite'}}/>
-                </div>
-              </div>
-            )}
-            {phase==='found'&&(
-              <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.6)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <div style={{width:40,height:40,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
-              </div>
-            )}
-          </div>
-        )}
-
-        {result&&(
-          <div style={{marginBottom:16}}>
-            {result.cover&&<img src={result.cover} style={{height:120,borderRadius:10,boxShadow:'0 6px 16px rgba(0,0,0,.2)',marginBottom:10}} alt="cover"/>}
-            <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:700,fontSize:16,color:'var(--ink)'}}>{result.title}</div>
-            {result.author&&<div style={{fontFamily:'Fredoka',fontSize:13,color:'var(--ink-soft)',marginTop:4}}>{result.author}</div>}
-            <button onClick={()=>onFound(result)} style={{marginTop:14,background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'12px 32px',borderRadius:16,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
-              开始阅读 →
-            </button>
-          </div>
-        )}
-
-        <button onClick={onClose} style={{background:'transparent',border:'1px dashed rgba(100,120,160,.4)',borderRadius:12,padding:'6px 20px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:'var(--ink-soft)',cursor:'pointer'}}>
-          关闭，手动搜索
-        </button>
+    <div style={ov}><div style={bx}>
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--ink)',marginBottom:14}}>
+        {result ? `✅ 找到啦：${result.title}` : (phase==='starting'?'📷 启动摄像头…':'📸 拍封面识别绘本')}
       </div>
-    </div>
+
+      {!result && phase!=='error' && (
+        <div style={{position:'relative',borderRadius:16,overflow:'hidden',marginBottom:14,background:'#000',aspectRatio:'4/3'}}>
+          <video ref={videoRef} style={{width:'100%',display:'block'}} muted playsInline/>
+          {phase==='ready' && (
+            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+              <div style={{width:'78%',height:'78%',border:'2px solid rgba(255,217,102,.75)',borderRadius:12}}/>
+            </div>
+          )}
+          {phase==='processing' && (
+            <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.65)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+              <div style={{width:40,height:40,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
+              <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#fff'}}>{hint}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase==='error' && !result && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#e05',marginBottom:14}}>{hint}</div>}
+
+      {phase==='ready' && !result && (
+        <>
+          <button onClick={handleCapture} style={{width:'100%',marginBottom:10,background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'14px',borderRadius:18,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+            📸 拍照识别封面
+          </button>
+          <div style={{fontFamily:'Fredoka',fontSize:12,color:'var(--ink-soft)',marginBottom:10}}>{hint}</div>
+        </>
+      )}
+
+      {result && (
+        <div style={{marginBottom:16}}>
+          {result.cover && <img src={result.cover} style={{height:110,borderRadius:10,boxShadow:'0 6px 16px rgba(0,0,0,.2)',marginBottom:10}} alt="cover"/>}
+          <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:700,fontSize:16,color:'var(--ink)'}}>{result.title}</div>
+          {result.zh_title && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink-soft)',marginTop:2}}>{result.zh_title}</div>}
+          {result.author && <div style={{fontFamily:'Fredoka',fontSize:13,color:'var(--ink-soft)',marginTop:2}}>{result.author}</div>}
+          {result.pages?.length > 0 && <div style={{fontFamily:'Fredoka',fontSize:12,color:'#4a7',marginTop:4}}>✓ 已获取 {result.pages.length} 页内容</div>}
+          <button onClick={()=>onFound(result)} style={{marginTop:14,width:'100%',background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'13px',borderRadius:16,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+            开始阅读 →
+          </button>
+        </div>
+      )}
+
+      <button onClick={onClose} style={{background:'transparent',border:'1px dashed rgba(100,120,160,.4)',borderRadius:12,padding:'7px 20px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:'var(--ink-soft)',cursor:'pointer'}}>
+        关闭，手动搜索
+      </button>
+    </div></div>
   );
 }
 
@@ -673,16 +754,20 @@ function HomeScreen({ isLandscape, onPickBook, onOpenCamera, query, setQuery, st
   const [loading,    setLoading]    = useState(false);
   const timerRef = useRef();
 
-  // 防抖搜索：本地 + Google Books API
+  // 防抖搜索：本地 → Google Books → GPT-4o AI兜底
   useEffect(() => {
     clearTimeout(timerRef.current);
     if (!query.trim()) { setApiResults([]); return; }
     timerRef.current = setTimeout(async () => {
       setLoading(true);
-      const res = await searchGoogleBooks(query.trim());
+      let res = await searchGoogleBooks(query.trim());
+      if (res.length === 0) {
+        const aiBook = await searchBookByAI(query.trim());
+        if (aiBook) res = [aiBook];
+      }
       setApiResults(res);
       setLoading(false);
-    }, 600);
+    }, 800);
     return () => clearTimeout(timerRef.current);
   }, [query]);
 
@@ -879,9 +964,78 @@ function PageDoneOverlay({ isLast, onNext, onReread }) {
 }
 
 /* ── 阅读主屏 ── */
+/* ══════════════════════════════════════════════
+   11b. 逐页拍照扫描
+   ══════════════════════════════════════════════ */
+function PageScanner({ onPageScanned, onClose }) {
+  const videoRef = useRef();
+  const [phase, setPhase] = useState('starting'); // starting|ready|processing|error
+  const [hint,  setHint]  = useState('');
+
+  useEffect(() => {
+    let stream, live = true;
+    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
+      .then(s => {
+        if (!live) { s.getTracks().forEach(t=>t.stop()); return; }
+        stream = s; videoRef.current.srcObject = s; videoRef.current.play(); setPhase('ready');
+      })
+      .catch(() => { if (live) { setHint('无法启动摄像头'); setPhase('error'); } });
+    return () => { live=false; stream?.getTracks().forEach(t=>t.stop()); };
+  }, []);
+
+  const handleCapture = async () => {
+    if (phase !== 'ready') return;
+    setPhase('processing'); setHint('AI 正在读取这一页…');
+    await speak('让我来读读这一页～');
+    const base64 = captureFrame(videoRef.current);
+    const r = await scanPagePhoto(base64);
+    if (!r) { setHint('识别失败，请重拍'); setPhase('ready'); return; }
+    onPageScanned(r);
+  };
+
+  const ov = { position:'fixed', inset:0, background:'rgba(10,20,48,.92)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', zIndex:90, display:'flex', alignItems:'center', justifyContent:'center', padding:20 };
+  const bx = { background:'rgba(255,255,255,.96)', borderRadius:28, padding:24, maxWidth:360, width:'100%', textAlign:'center', boxShadow:'0 24px 48px rgba(10,20,48,.5)' };
+
+  return (
+    <div style={ov}><div style={bx}>
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--ink)',marginBottom:14}}>
+        📸 拍摄绘本这一页
+      </div>
+      {phase !== 'error' && (
+        <div style={{position:'relative',borderRadius:16,overflow:'hidden',marginBottom:14,background:'#000',aspectRatio:'4/3'}}>
+          <video ref={videoRef} style={{width:'100%',display:'block'}} muted playsInline/>
+          {phase==='ready' && (
+            <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+              <div style={{width:'90%',height:'88%',border:'2px solid rgba(255,217,102,.75)',borderRadius:10}}/>
+            </div>
+          )}
+          {phase==='processing' && (
+            <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.65)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+              <div style={{width:40,height:40,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
+              <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#fff'}}>{hint}</div>
+            </div>
+          )}
+        </div>
+      )}
+      {phase==='error' && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#e05',marginBottom:14}}>{hint}</div>}
+      {phase==='ready' && (
+        <button onClick={handleCapture} style={{width:'100%',marginBottom:12,background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'14px',borderRadius:18,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+          📸 拍照识别文字
+        </button>
+      )}
+      <button onClick={onClose} style={{background:'transparent',border:'1px dashed rgba(100,120,160,.4)',borderRadius:12,padding:'7px 20px',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,color:'var(--ink-soft)',cursor:'pointer'}}>
+        取消
+      </button>
+    </div></div>
+  );
+}
+
 function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
-  const local     = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
-  const rawPages  = local?.pages || [{en:'', desc:bookData.description||'请自由朗读这本书的内容。', zh:''}];
+  const local    = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
+  const initPages = local?.pages || bookData.pages?.length
+    ? (local?.pages || bookData.pages)
+    : [{en:'', desc:bookData.description||'请自由朗读这本书的内容。', zh:''}];
+  const [pages,      setPages]      = useState(initPages);
   const [pageIdx,    setPageIdx]    = useState(0);
   const [mode,       setMode]       = useState(null);
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -893,12 +1047,28 @@ function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
   const [correcting, setCorrecting] = useState(null);
   const [pageDone,   setPageDone]   = useState(false);
   const [busy,       setBusy]       = useState(false);
+  const [scanning,   setScanning]   = useState(false);
 
-  const total  = rawPages.length;
-  const page   = rawPages[pageIdx];
+  const total  = pages.length;
+  const page   = pages[pageIdx];
   const isLast = pageIdx === total - 1;
   const isFirst= pageIdx === 0;
-  const freeRead = !page.en; // API 书，没有可对比的文字
+  const freeRead = !page.en;
+
+  const handlePageScanned = async (scanned) => {
+    setScanning(false);
+    const updated = [...pages];
+    updated[pageIdx] = { en: scanned.en || '', zh: scanned.zh || '', scene: scanned.scene || '' };
+    setPages(updated);
+    if (scanned.en) {
+      const msg = '这一页读取成功！现在我来给你读一读～';
+      setBanner(msg); await speak(msg); setBanner('');
+      await speakEn(scanned.en);
+    } else {
+      const msg = '这页好像没有文字，可以自由朗读画面内容哦～';
+      setBanner(msg); await speak(msg); setBanner('');
+    }
+  };
 
   // 每页进入时语音引导
   useEffect(() => {
@@ -983,9 +1153,14 @@ function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
   };
 
   const readBtns = (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-      <ActionButton icon="🎤" label="我来读" sub="Read aloud" kind="mic" active={mode==='me'} onClick={handleMe} disabled={busy&&mode!=='me'}/>
-      <ActionButton icon="🔊" label="听AI读" sub="Listen"     kind="ai"  active={mode==='ai'} onClick={handleAI} disabled={busy&&mode!=='ai'}/>
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <ActionButton icon="🎤" label="我来读" sub="Read aloud" kind="mic" active={mode==='me'} onClick={handleMe} disabled={busy&&mode!=='me'}/>
+        <ActionButton icon="🔊" label="听AI读" sub="Listen"     kind="ai"  active={mode==='ai'} onClick={handleAI} disabled={busy&&mode!=='ai'}/>
+      </div>
+      <button onClick={()=>setScanning(true)} disabled={busy} style={{width:'100%',padding:'11px',borderRadius:16,border:'1.5px dashed rgba(122,163,214,.6)',background:'rgba(255,255,255,.7)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,color:'var(--ink-soft)',cursor:busy?'not-allowed':'pointer',opacity:busy?.5:1}}>
+        📸 拍这一页识别文字
+      </button>
     </div>
   );
   const navBtns = (
@@ -1026,6 +1201,7 @@ function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
     <>{isLandscape?landscape:portrait}
       {correcting&&<CorrectionOverlay word={correcting.word} onDone={afterCorrection}/>}
       {pageDone&&<PageDoneOverlay isLast={isLast} onNext={handleNext} onReread={handleReread}/>}
+      {scanning&&<PageScanner onPageScanned={handlePageScanned} onClose={()=>setScanning(false)}/>}
     </>
   );
 }

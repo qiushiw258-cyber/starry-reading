@@ -18,8 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inject Azure key
-        run: sed -i "s/__AZURE_KEY__/${{ secrets.AZURE_KEY }}/g" index.html
+      - name: Inject secrets
+        run: |
+          sed -i "s/__AZURE_KEY__/${{ secrets.AZURE_KEY }}/g" index.html
+          sed -i "s/__OPENAI_KEY__/${{ secrets.OPENAI_KEY }}/g" index.html
 
       - uses: actions/configure-pages@v5
 
