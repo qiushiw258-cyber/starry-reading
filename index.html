@@ -83,7 +83,7 @@ async function _azureTTS(text, lang = 'zh') {
   if (_azAudio) { try { _azAudio.pause(); } catch(e){} _azAudio = null; }
   const ssml = lang === 'zh'
     ? `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='zh-CN-XiaoxiaoNeural'><mstts:express-as style='gentle'><prosody rate='-5%' pitch='+5%'>${escXml(text)}</prosody></mstts:express-as></voice></speak>`
-    : `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name='en-US-AriaNeural'><prosody rate='-10%' pitch='+3%'>${escXml(text)}</prosody></voice></speak>`;
+    : `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'><voice name='en-US-JennyNeural'><mstts:express-as style='friendly'><prosody rate='-12%' pitch='+5%'>${escXml(text)}</prosody></mstts:express-as></voice></speak>`;
   try {
     const res = await fetch(`https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
       method: 'POST',
