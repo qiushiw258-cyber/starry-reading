@@ -20,8 +20,16 @@ jobs:
 
       - name: Inject secrets
         run: |
-          sed -i "s/__AZURE_KEY__/${{ secrets.AZURE_KEY }}/g" index.html
-          sed -i "s/__OPENAI_KEY__/${{ secrets.OPENAI_KEY }}/g" index.html
+          python3 -c "
+          import os
+          with open('index.html','r') as f: c=f.read()
+          c=c.replace('__AZURE_KEY__', os.environ['AZURE_KEY'])
+          c=c.replace('__OPENAI_KEY__', os.environ['OPENAI_KEY'])
+          with open('index.html','w') as f: f.write(c)
+          "
+        env:
+          AZURE_KEY: ${{ secrets.AZURE_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
 
       - uses: actions/configure-pages@v5
 

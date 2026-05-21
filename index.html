@@ -255,6 +255,27 @@ function saveStars(arr) {
 }
 
 /* ══════════════════════════════════════════════
+   5b. 绘本页面持久化 — localStorage 按书名存储
+   ══════════════════════════════════════════════ */
+function bookPageKey(title) {
+  return 'sr-pages-' + title.toLowerCase().replace(/[^a-z0-9一-龥]/g, '-').slice(0, 50);
+}
+function loadBookPages(title) {
+  try { const s = localStorage.getItem(bookPageKey(title)); return s ? JSON.parse(s) : {}; }
+  catch { return {}; }
+}
+function saveBookPage(title, idx, pageData) {
+  try {
+    const all = loadBookPages(title);
+    all[idx] = pageData;
+    localStorage.setItem(bookPageKey(title), JSON.stringify(all));
+  } catch {}
+}
+function clearBookPages(title) {
+  try { localStorage.removeItem(bookPageKey(title)); } catch {}
+}
+
+/* ══════════════════════════════════════════════
    6. 书库 — 本地演示书 + Google Books API
    ══════════════════════════════════════════════ */
 const LOCAL_BOOKS = {
@@ -603,6 +624,9 @@ function CameraScanner({ onFound, onClose }) {
 
   const handleCapture = async () => {
     if (phase !== 'ready') return;
+    if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') {
+      setHint('AI功能未配置，请检查 GitHub Secrets 中的 OPENAI_KEY'); setPhase('error'); return;
+    }
     setPhase('processing'); setHint('AI 正在识别封面…');
     await speak('让我来认一认这本书～');
     const base64 = captureFrame(videoRef.current);
@@ -1032,10 +1056,12 @@ function PageScanner({ onPageScanned, onClose }) {
 
 function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
   const local    = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
-  const initPages = local?.pages || bookData.pages?.length
-    ? (local?.pages || bookData.pages)
-    : [{en:'', desc:bookData.description||'请自由朗读这本书的内容。', zh:''}];
-  const [pages,      setPages]      = useState(initPages);
+  const initPages = (() => {
+    const base = local?.pages || (bookData.pages?.length ? bookData.pages : [{en:'', zh:'', desc:bookData.description||''}]);
+    const saved = loadBookPages(bookData.title);
+    return base.map((p, i) => saved[i] ? { ...p, ...saved[i] } : p);
+  })();
+  const [pages, setPages] = useState(initPages);
   const [pageIdx,    setPageIdx]    = useState(0);
   const [mode,       setMode]       = useState(null);
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -1057,17 +1083,27 @@ function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
 
   const handlePageScanned = async (scanned) => {
     setScanning(false);
+    const newPage = { en: scanned.en || '', zh: scanned.zh || '', scene: scanned.scene || '', _scanned: true };
     const updated = [...pages];
-    updated[pageIdx] = { en: scanned.en || '', zh: scanned.zh || '', scene: scanned.scene || '' };
+    updated[pageIdx] = newPage;
     setPages(updated);
+    saveBookPage(bookData.title, pageIdx, newPage);
     if (scanned.en) {
-      const msg = '这一页读取成功！现在我来给你读一读～';
+      const msg = '这一页读取成功！保存好啦，现在来听一听～';
       setBanner(msg); await speak(msg); setBanner('');
       await speakEn(scanned.en);
     } else {
       const msg = '这页好像没有文字，可以自由朗读画面内容哦～';
       setBanner(msg); await speak(msg); setBanner('');
     }
+  };
+
+  const handleAddPage = () => {
+    const newPage = { en:'', zh:'', desc:'拍摄下一页或自由朗读～' };
+    const updated = [...pages, newPage];
+    setPages(updated);
+    setPageIdx(updated.length - 1);
+    setPageDone(false); resetPage();
   };
 
   // 每页进入时语音引导
@@ -1164,11 +1200,18 @@ function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
     </div>
   );
   const navBtns = (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-      <button onClick={handlePrev} disabled={isFirst} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,255,255,.5)',background:'rgba(255,255,255,.78)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:isFirst?'rgba(74,90,130,.35)':'var(--ink)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:isFirst?'not-allowed':'pointer',opacity:isFirst?.5:1,boxShadow:isFirst?'none':'0 6px 14px rgba(10,20,48,.2)'}}>← 上一页</button>
-      <button onClick={handleNext} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,217,102,.6)',background:isLast?'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)':'linear-gradient(165deg,rgba(255,233,168,.95),rgba(255,217,102,.95))',color:'#5C3A1E',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 18px rgba(245,185,66,.45)',letterSpacing:.5}}>
-        {isLast?'✦ 读完啦':'下一页 →'}
-      </button>
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <button onClick={handlePrev} disabled={isFirst} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,255,255,.5)',background:'rgba(255,255,255,.78)',backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',color:isFirst?'rgba(74,90,130,.35)':'var(--ink)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:isFirst?'not-allowed':'pointer',opacity:isFirst?.5:1,boxShadow:isFirst?'none':'0 6px 14px rgba(10,20,48,.2)'}}>← 上一页</button>
+        <button onClick={handleNext} style={{padding:'14px',borderRadius:18,border:'1px solid rgba(255,217,102,.6)',background:isLast?'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)':'linear-gradient(165deg,rgba(255,233,168,.95),rgba(255,217,102,.95))',color:'#5C3A1E',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 8px 18px rgba(245,185,66,.45)',letterSpacing:.5}}>
+          {isLast?'✦ 读完啦':'下一页 →'}
+        </button>
+      </div>
+      {isLast && (
+        <button onClick={handleAddPage} style={{width:'100%',padding:'11px',borderRadius:16,border:'1.5px dashed rgba(122,163,214,.5)',background:'rgba(255,255,255,.6)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink-soft)',cursor:'pointer'}}>
+          ➕ 这本书还有下一页
+        </button>
+      )}
     </div>
   );
 
