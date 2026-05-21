@@ -276,43 +276,80 @@ function clearBookPages(title) {
 }
 
 /* ══════════════════════════════════════════════
-   6. 书库 — 本地演示书 + Google Books API
+   6. 书库 — 精选中英文绘本全量书目 + 多渠道搜索
    ══════════════════════════════════════════════ */
-const LOCAL_BOOKS = {
-  "Tom and the Little Star": {
-    icon:"✦", palette:["#1a2a52","#4670a8","#FFD966"],
-    pages:[
-      {en:"One night Tom looked up at the sky.",        zh:"一天晚上，汤姆抬头看天空。"},
-      {en:"A tiny star fell down beside his window.",   zh:"一颗小星星落在他的窗边。"},
-      {en:"Hello little star are you lost?",            zh:"你好，小星星！你迷路了吗？"},
-      {en:"The star smiled and said yes please help me.",zh:"星星笑着说：是的，请帮帮我。"},
-      {en:"Tom held the star and ran to the hill.",     zh:"汤姆抱起星星，跑向小山。"},
-      {en:"He threw it gently back into the sky.",      zh:"他轻轻地把它抛回天空。"},
-    ],
-  },
-  "The Cypress and the Moon": {
-    icon:"🌙", palette:["#0f1a3a","#2c4a7e","#F5EDD6"],
-    pages:[
-      {en:"An old cypress stood tall on the hill.",  zh:"一棵老柏树站在山上。"},
-      {en:"Every night the moon came to visit.",     zh:"每天晚上，月亮都来拜访。"},
-      {en:"Tell me a story said the moon.",          zh:"给我讲个故事吧，月亮说。"},
-      {en:"And the cypress whispered with the wind.",zh:"柏树就和风一起轻声说话。"},
-    ],
-  },
-  "Sunflower Field": {
-    icon:"🌻", palette:["#2c4a7e","#FFCE5C","#F5EDD6"],
-    pages:[
-      {en:"The sun woke up the yellow flowers.", zh:"太阳叫醒了黄色的花。"},
-      {en:"They turned their faces to the sky.", zh:"它们把脸转向天空。"},
-      {en:"Good morning big sun they said.",     zh:"早上好，大太阳！它们说。"},
-    ],
-  },
-};
+const BOOK_CATALOG = [
+  { title:"The Very Hungry Caterpillar", zh_title:"好饿的毛毛虫", aliases:["hungry caterpillar","毛毛虫","hungry","eric carle caterpillar"], author:"Eric Carle", level:"Pre-K", icon:"🐛", palette:["#2c7a2c","#e8c84a","#e84a2c"],
+    pages:[{en:"On Monday he ate through one apple.",zh:"星期一，他吃了一个苹果。"},{en:"On Tuesday he ate through two pears.",zh:"星期二，他吃了两个梨。"},{en:"On Wednesday he ate through three plums.",zh:"星期三，他吃了三个李子。"},{en:"On Thursday he ate through four strawberries.",zh:"星期四，他吃了四个草莓。"},{en:"On Friday he ate through five oranges.",zh:"星期五，他吃了五个橘子。"},{en:"He built a small house called a cocoon.",zh:"他建了一座小房子，叫茧。"},{en:"He pushed his way out and he was a beautiful butterfly!",zh:"他钻了出来，变成了一只漂亮的蝴蝶！"}]},
+  { title:"Goodnight Moon", zh_title:"晚安，月亮", aliases:["goodnight","晚安月亮","good night moon","brown"], author:"Margaret Wise Brown", level:"Pre-K", icon:"🌙", palette:["#1a2a52","#4670a8","#F5EDD6"],
+    pages:[{en:"In the great green room there was a telephone.",zh:"在那间绿色的大屋子里，有一部电话。"},{en:"And a red balloon and a picture of a cow jumping over the moon.",zh:"还有一个红气球，和一幅奶牛跳过月亮的图画。"},{en:"Goodnight room. Goodnight moon.",zh:"晚安，房间。晚安，月亮。"},{en:"Goodnight cow jumping over the moon.",zh:"晚安，跳过月亮的奶牛。"},{en:"Goodnight stars. Goodnight air. Goodnight noises everywhere.",zh:"晚安，星星。晚安，空气。晚安，所有的声音。"}]},
+  { title:"Where the Wild Things Are", zh_title:"野兽出没的地方", aliases:["wild things","野兽","sendak","where wild"], author:"Maurice Sendak", level:"K-2", icon:"🐾", palette:["#2c4a2c","#4a7a3a","#F5EDD6"],
+    pages:[{en:"The night Max wore his wolf suit he made mischief of one kind and another.",zh:"那天晚上，马克斯穿着狼装，惹了各种麻烦。"},{en:"His mother called him WILD THING.",zh:"妈妈叫他野兽。"},{en:"And Max was sent to bed without eating anything.",zh:"马克斯被罚进卧室，没有晚饭吃。"},{en:"That very night in Max's room a forest grew.",zh:"就在那晚，马克斯的房间里长出了一片森林。"},{en:"Let the wild rumpus start!",zh:"野蛮的喧嚣开始了！"},{en:"But Max the king of all wild things was lonely and wanted to be where someone loved him best.",zh:"但马克斯感到寂寞，想回到最爱他的人身边。"}]},
+  { title:"Brown Bear Brown Bear What Do You See", zh_title:"棕熊棕熊你看到了什么", aliases:["brown bear","棕熊","what do you see","bill martin"], author:"Bill Martin Jr.", level:"Pre-K", icon:"🐻", palette:["#8B4513","#D2691E","#F5EDD6"],
+    pages:[{en:"Brown Bear Brown Bear what do you see?",zh:"棕熊棕熊，你看到了什么？"},{en:"I see a red bird looking at me.",zh:"我看到一只红色的小鸟在看着我。"},{en:"Red Bird Red Bird what do you see? I see a yellow duck looking at me.",zh:"红色小鸟你看到什么？我看到一只黄色的鸭子在看我。"},{en:"Yellow Duck Yellow Duck what do you see? I see a blue horse looking at me.",zh:"黄色鸭子你看到什么？我看到一匹蓝色的马在看我。"},{en:"I see children looking at me!",zh:"我看到孩子们在看着我！"}]},
+  { title:"The Gruffalo", zh_title:"咕噜牛", aliases:["gruffalo","咕噜牛","julia donaldson","gruffalo mouse"], author:"Julia Donaldson", level:"K-2", icon:"🦁", palette:["#2c3a1a","#5a6a3a","#F5EDD6"],
+    pages:[{en:"A mouse took a stroll through the deep dark wood.",zh:"一只老鼠在幽深的树林里散步。"},{en:"A fox saw the mouse and the mouse looked good.",zh:"一只狐狸看见了老鼠，老鼠看起来好美味。"},{en:"I'm having lunch with a Gruffalo.",zh:"我要和咕噜牛一起吃午饭。"},{en:"A Gruffalo? What's a Gruffalo?",zh:"咕噜牛？咕噜牛是什么？"},{en:"A Gruffalo! He has terrible tusks and terrible claws and terrible teeth in his terrible jaws.",zh:"咕噜牛！他有可怕的獠牙、可怕的爪子和可怕下颚里的可怕牙齿。"},{en:"Silly old fox doesn't he know there's no such thing as a Gruffalo?",zh:"蠢狐狸，他难道不知道根本没有咕噜牛这种东西吗？"}]},
+  { title:"If You Give a Mouse a Cookie", zh_title:"如果你给老鼠一块饼干", aliases:["give a mouse a cookie","老鼠饼干","if you give","numeroff mouse"], author:"Laura Numeroff", level:"Pre-K", icon:"🐭", palette:["#D2691E","#8B4513","#F5EDD6"],
+    pages:[{en:"If you give a mouse a cookie he's going to ask for a glass of milk.",zh:"如果你给老鼠一块饼干，他会要一杯牛奶。"},{en:"When you give him the milk he'll probably ask you for a straw.",zh:"给他牛奶后，他可能会要一根吸管。"},{en:"When he's finished he'll ask for a napkin.",zh:"喝完之后，他会要一张纸巾。"},{en:"Then he'll want to look in a mirror to make sure he doesn't have a milk mustache.",zh:"然后他想照镜子，确认自己没有牛奶胡子。"},{en:"Which might remind him that he needs a haircut.",zh:"这可能提醒他需要理发。"}]},
+  { title:"Guess How Much I Love You", zh_title:"猜猜我有多爱你", aliases:["guess how much","猜猜我有多爱","爱你","兔子爱你","how much love"], author:"Sam McBratney", level:"Pre-K", icon:"🐰", palette:["#8B4513","#c8a87a","#F5EDD6"],
+    pages:[{en:"I love you this much said Little Nutbrown Hare stretching out his arms.",zh:"我爱你这么多，小栗棕兔说，张开了他的小手臂。"},{en:"I love you this much said Big Nutbrown Hare stretching out his long arms.",zh:"我爱你这么多，大栗棕兔说，张开了他长长的大手臂。"},{en:"I love you as high as I can reach.",zh:"我爱你，像我能伸得多高那样高。"},{en:"I love you as high as I can hop!",zh:"我爱你，像我能跳得多高那样高！"},{en:"I love you to the moon said Little Nutbrown Hare.",zh:"我爱你到月亮那里，小栗棕兔说。"},{en:"I love you to the moon and back said Big Nutbrown Hare.",zh:"我爱你到月亮那里，再回来，大栗棕兔说。"}]},
+  { title:"No David", zh_title:"大卫不可以", aliases:["no david","大卫","david不可以","david shannon"], author:"David Shannon", level:"Pre-K", icon:"🙅", palette:["#cc4400","#8B0000","#F5EDD6"],
+    pages:[{en:"No David!",zh:"大卫，不可以！"},{en:"Come back here David!",zh:"大卫，回来！"},{en:"No no no!",zh:"不，不，不！"},{en:"Stop that right now David!",zh:"大卫，马上停下！"},{en:"Go to your room!",zh:"回你的房间去！"},{en:"I love you David.",zh:"我爱你，大卫。"}]},
+  { title:"The Rainbow Fish", zh_title:"彩虹鱼", aliases:["rainbow fish","彩虹鱼","marcus pfister","rainbow"], author:"Marcus Pfister", level:"Pre-K", icon:"🐟", palette:["#1a4a8a","#4a90d9","#FFD966"],
+    pages:[{en:"Deep in the ocean there lived a fish called Rainbow Fish.",zh:"在深深的海底，住着一条叫彩虹鱼的鱼。"},{en:"He had scales of every color imaginable.",zh:"他全身长满了各种颜色的鳞片。"},{en:"He was the most beautiful fish in the entire ocean.",zh:"他是整个海洋里最漂亮的鱼。"},{en:"But he was also the loneliest.",zh:"但他也是最孤独的。"},{en:"One by one he gave away his shining scales.",zh:"他一片一片地把闪光的鳞片送了出去。"},{en:"Now he was happy and he swam off to join his friends.",zh:"现在他很快乐，游去和朋友们在一起。"}]},
+  { title:"Little Blue and Little Yellow", zh_title:"小蓝和小黄", aliases:["little blue yellow","小蓝小黄","leo lionni","蓝和黄"], author:"Leo Lionni", level:"Pre-K", icon:"🔵", palette:["#1a4a8a","#FFCC00","#2c8a2c"],
+    pages:[{en:"This is little Blue and this is little Yellow.",zh:"这是小蓝，这是小黄。"},{en:"They were best friends.",zh:"他们是最好的朋友。"},{en:"When they met they hugged and hugged and hugged.",zh:"每次相遇，他们都紧紧地拥抱。"},{en:"They hugged so hard that they became green.",zh:"他们抱得太紧，变成了绿色。"},{en:"Their mamas and papas didn't recognize them.",zh:"他们的妈妈和爸爸都认不出他们了。"},{en:"They cried little blue and little yellow tears and turned back to themselves.",zh:"他们哭了出来，变回了原来的颜色。"}]},
+  { title:"Dragons Love Tacos", zh_title:"龙喜欢吃玉米饼", aliases:["dragons tacos","dragon taco","龙玉米饼","adam rubin dragon"], author:"Adam Rubin", level:"Pre-K", icon:"🐉", palette:["#8B0000","#cc4400","#F5EDD6"],
+    pages:[{en:"Hey kid! Do you want to know something that every kid should know?",zh:"嘿，小朋友！你想知道每个小朋友都应该知道的事吗？"},{en:"Dragons love tacos.",zh:"龙喜欢吃玉米饼。"},{en:"They love crunchy tacos and soft tacos.",zh:"他们喜欢脆的，也喜欢软的玉米饼。"},{en:"But dragons do NOT like spicy salsa.",zh:"但龙不喜欢辣的莎莎酱。"},{en:"Because if they eat spicy food they breathe fire!",zh:"因为吃了辣的东西，他们会喷火！"}]},
+  { title:"The Giving Tree", zh_title:"爱心树", aliases:["giving tree","爱心树","苹果树","shel silverstein"], author:"Shel Silverstein", level:"K-2", icon:"🌳", palette:["#2c6a1a","#3a8a2a","#F5EDD6"],
+    pages:[{en:"Once there was a tree and she loved a little boy.",zh:"从前有一棵树，她爱着一个小男孩。"},{en:"Every day the boy would come and gather her leaves.",zh:"每天男孩都来收集她的叶子。"},{en:"And swing from her branches and eat her apples.",zh:"在她的树枝上荡秋千，吃她的苹果。"},{en:"And as the boy grew older he wanted more.",zh:"随着男孩长大，他想要更多。"},{en:"Take my trunk said the tree and build your house.",zh:"拿走我的树干吧，树说，去建你的房子。"},{en:"And the tree was happy.",zh:"树是快乐的。"},{en:"Come boy sit down and rest said the tree. And the boy did and the tree was happy.",zh:"来，男孩，坐下来休息，树说。男孩坐了，树很快乐。"}]},
+  { title:"Pete the Cat I Love My White Shoes", zh_title:"皮特猫我爱我的白鞋子", aliases:["pete the cat","pete cat","皮特猫","white shoes","pete"], author:"Eric Litwin", level:"Pre-K", icon:"🐈", palette:["#1a2a52","#4670a8","#F5EDD6"],
+    pages:[{en:"Pete the Cat was walking down the street wearing his brand new white shoes.",zh:"皮特猫穿着崭新的白鞋子走在街上。"},{en:"Pete stepped in a large pile of strawberries. What color were his shoes?",zh:"皮特踩进了一大堆草莓里。他的鞋子变成了什么颜色？"},{en:"His shoes were red! Did Pete cry? Goodness no!",zh:"他的鞋子变成红色了！皮特哭了吗？当然没有！"},{en:"He kept walking along and singing his song.",zh:"他继续走，继续唱歌。"},{en:"No matter what you step in keep walking along and singing your song.",zh:"不管你踩到什么，继续向前走，继续唱你的歌。"}]},
+  { title:"Chicka Chicka Boom Boom", zh_title:"嘿嘿嘣嘣字母树", aliases:["chicka boom","alphabet tree","字母树","chicka chicka"], author:"Bill Martin Jr.", level:"Pre-K", icon:"🌴", palette:["#1a6600","#33aa00","#F5EDD6"],
+    pages:[{en:"A told B and B told C I'll meet you at the top of the coconut tree.",zh:"A告诉B，B告诉C：我在椰子树顶上等你。"},{en:"Chicka chicka boom boom! Will there be enough room?",zh:"嘿嘿嘣嘣！会有足够的空间吗？"},{en:"Here comes D and E and F and G.",zh:"D、E、F和G也来了。"},{en:"Skit skat skoodle doot. Flip flop flee.",zh:"噼里啪啦，咚咚哗哗。"},{en:"Mamas and papas and aunts and uncles came rushing to the coconut tree.",zh:"爸爸妈妈叔叔阿姨们都跑来了。"}]},
+  { title:"Corduroy", zh_title:"灯芯绒熊科都罗伊", aliases:["corduroy bear","corduroy","灯芯绒熊","don freeman"], author:"Don Freeman", level:"Pre-K", icon:"🧸", palette:["#8B6914","#D4A017","#F5EDD6"],
+    pages:[{en:"Corduroy is a bear who once lived in the toy department of a big store.",zh:"科都罗伊是一只熊，曾住在一家大商店的玩具区。"},{en:"Day after day he waited for someone to take him home.",zh:"他一天又一天地等待有人把他带回家。"},{en:"One morning a little girl named Lisa stopped and looked at him.",zh:"一天早晨，一个叫丽莎的小女孩停下来看他。"},{en:"I've always wanted a teddy bear said Lisa.",zh:"我一直想要一只泰迪熊，丽莎说。"},{en:"You're just what I've always wanted said Lisa.",zh:"你正是我一直想要的，丽莎说。"}]},
+  { title:"The Snowy Day", zh_title:"下雪天", aliases:["snowy day","snow day","下雪天","peter snow","ezra keats"], author:"Ezra Jack Keats", level:"Pre-K", icon:"❄️", palette:["#1a2a52","#4a7ac8","#F5EDD6"],
+    pages:[{en:"One winter morning Peter woke up and looked out the window.",zh:"一个冬天的早晨，彼得醒来，看向窗外。"},{en:"Snow had fallen during the night.",zh:"夜里下雪了。"},{en:"He walked with his toes pointing in then pointing out.",zh:"他踮着脚尖走，然后又迈着外八走。"},{en:"He dragged his feet slowly to make tracks in the snow.",zh:"他慢慢地拖着脚，在雪地上留下足迹。"},{en:"That night he thought about the fun he had in the snow.",zh:"那晚他想起在雪地里的快乐时光。"}]},
+  { title:"Frog and Toad Are Friends", zh_title:"青蛙和蟾蜍是朋友", aliases:["frog toad","青蛙蟾蜍","frog and toad","arnold lobel"], author:"Arnold Lobel", level:"K-2", icon:"🐸", palette:["#2c6a1a","#4a8a3a","#F5EDD6"],
+    pages:[{en:"Frog ran up the path to Toad's house.",zh:"青蛙跑上小路，来到蟾蜍的家。"},{en:"Toad wake up! said Frog. It is spring!",zh:"蟾蜍，醒醒！青蛙说。春天来了！"},{en:"Blah! said Toad. My calendar says it is not spring yet.",zh:"啊！蟾蜍说。我的日历上说还没到春天。"},{en:"We should go for a walk said Frog.",zh:"我们应该去散散步，青蛙说。"}]},
+  { title:"Elephant and Piggie We Are in a Book", zh_title:"小象小猪我们在书里", aliases:["elephant piggie","小象小猪","gerald piggie","mo willems elephant"], author:"Mo Willems", level:"Pre-K", icon:"🐘", palette:["#4a7a3a","#6aaa5a","#F5EDD6"],
+    pages:[{en:"Gerald! There is a reader!",zh:"杰拉尔德！有一个读者！"},{en:"Someone is reading us!",zh:"有人在读我们！"},{en:"I can make the reader say a word!",zh:"我能让读者说一个词！"},{en:"Say BANANA!",zh:"说——香蕉！"},{en:"This is the most fun I have ever had!",zh:"这是我经历过的最有趣的事！"}]},
+  { title:"Chrysanthemum", zh_title:"菊花的名字", aliases:["chrysanthemum","菊花名字","菊花","kevin henkes name"], author:"Kevin Henkes", level:"K-2", icon:"🌸", palette:["#8B0057","#D4008A","#F5EDD6"],
+    pages:[{en:"Chrysanthemum thought her name was absolutely perfect.",zh:"菊花认为她的名字绝对完美。"},{en:"It was her name and she loved it.",zh:"那是她的名字，她爱它。"},{en:"But when school started everyone teased her about her name.",zh:"但学校开始后，大家都嘲笑她的名字。"},{en:"Your name is so long it barely fits on your name tag!",zh:"你的名字太长了，名牌上几乎写不下！"},{en:"I think your name is absolutely perfect said the music teacher.",zh:"我认为你的名字绝对完美，音乐老师说。"}]},
+  { title:"Click Clack Moo Cows That Type", zh_title:"会打字的牛", aliases:["click clack moo","打字的牛","cows type","doreen cronin"], author:"Doreen Cronin", level:"K-2", icon:"🐄", palette:["#4a3a1a","#8a6a3a","#F5EDD6"],
+    pages:[{en:"Farmer Brown had a problem. His cows liked to type.",zh:"布朗农夫有个问题：他的奶牛喜欢打字。"},{en:"Click clack moo. Click clack moo. Clickety clack moo.",zh:"嗒嗒哞。嗒嗒哞。嗒嗒嗒哞。"},{en:"Dear Farmer Brown the cows wrote. It is very cold in the barn.",zh:"亲爱的布朗农夫，奶牛们写道：谷仓里很冷。"},{en:"We would like electric blankets.",zh:"我们想要电热毯。"},{en:"The cows had the blankets and Farmer Brown got his milk.",zh:"奶牛们有了电热毯，布朗农夫得到了牛奶。"}]},
+  // 中文绘本
+  { title:"Tom and the Little Star", zh_title:"汤姆和小星星", aliases:["tom star","汤姆星星","little star"], author:"Starry Reading", level:"Pre-K", icon:"✦", palette:["#1a2a52","#4670a8","#FFD966"],
+    pages:[{en:"One night Tom looked up at the sky.",zh:"一天晚上，汤姆抬头看天空。"},{en:"A tiny star fell down beside his window.",zh:"一颗小星星落在他的窗边。"},{en:"Hello little star are you lost?",zh:"你好，小星星！你迷路了吗？"},{en:"The star smiled and said yes please help me.",zh:"星星笑着说：是的，请帮帮我。"},{en:"Tom held the star and ran to the hill.",zh:"汤姆抱起星星，跑向小山。"},{en:"He threw it gently back into the sky.",zh:"他轻轻地把它抛回天空。"}]},
+  { title:"The Cypress and the Moon", zh_title:"柏树与月亮", aliases:["cypress moon","柏树月亮","月亮树"], author:"Starry Reading", level:"Pre-K", icon:"🌙", palette:["#0f1a3a","#2c4a7e","#F5EDD6"],
+    pages:[{en:"An old cypress stood tall on the hill.",zh:"一棵老柏树站在山上。"},{en:"Every night the moon came to visit.",zh:"每天晚上，月亮都来拜访。"},{en:"Tell me a story said the moon.",zh:"给我讲个故事吧，月亮说。"},{en:"And the cypress whispered with the wind.",zh:"柏树就和风一起轻声说话。"}]},
+];
 
-// Google Books API 搜索（免费，无需 key，CORS 开放）
+// 书名快速索引（title → catalog entry）
+const CATALOG_MAP = new Map(BOOK_CATALOG.map(b => [b.title, b]));
+
+// 模糊搜索本地书目（支持中英文、别名、简称）
+function searchLocalCatalog(q) {
+  if (!q.trim()) return BOOK_CATALOG;
+  const s = q.trim().toLowerCase().replace(/[^\w一-鿿]/g, '');
+  return BOOK_CATALOG.filter(b => {
+    const fields = [
+      b.title.toLowerCase(),
+      (b.zh_title || '').toLowerCase(),
+      ...(b.aliases || []).map(a => a.toLowerCase()),
+      (b.author || '').toLowerCase(),
+    ];
+    return fields.some(f => f.replace(/[^\w一-鿿]/g,'').includes(s));
+  });
+}
+
+// Google Books API 搜索（免费，无需 key）
 async function searchGoogleBooks(q) {
   try {
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=6&printType=books`;
+    // 中文书名加 intitle: 提高精度
+    const query = /[一-鿿]/.test(q) ? `intitle:${q}` : q;
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&printType=books&langRestrict=en`;
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
@@ -330,6 +367,28 @@ async function searchGoogleBooks(q) {
       };
     });
   } catch { return []; }
+}
+
+// 清除无效空缓存
+function clearInvalidCache() {
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('sr-pages-'));
+    keys.forEach(k => {
+      try {
+        const v = JSON.parse(localStorage.getItem(k));
+        if (!v || typeof v !== 'object' || Object.keys(v).length === 0) {
+          localStorage.removeItem(k);
+        }
+      } catch { localStorage.removeItem(k); }
+    });
+  } catch {}
+}
+
+// API 连通性检测（仅检测 key 格式，不实际发请求）
+function checkApiConfig() {
+  const hasAzure = AZURE_KEY && !AZURE_KEY.startsWith('__') && AZURE_KEY.length > 10;
+  const hasOpenAI = OPENAI_KEY && !OPENAI_KEY.startsWith('__') && OPENAI_KEY.length > 20;
+  return { azure: hasAzure, openai: hasOpenAI };
 }
 
 /* ══════════════════════════════════════════════
@@ -401,15 +460,19 @@ async function scanPagePhoto(base64) {
   );
 }
 
-// AI书名搜索 → 生成绘本内容
+// AI书名搜索 → 语义理解中英文书名，返回真实内容
 async function searchBookByAI(title) {
   const r = await _gptText(
-    `Children's picture book reading app. Book: "${title}".
-If you know this book provide real content, otherwise create content for this title.
-Return JSON: {"title":"${title}","author":"","zh_title":"中文书名","description":"中文简介","pages":[{"en":"English text page 1 (simple, 5-8yr old level)","zh":"中文翻译"},{"en":"...","zh":"..."}]}
-Include 4-8 pages. English must be simple sentences.`
+    `You are a children's picture book database for a reading app (ages 4-8).
+The user searched for: "${title}"
+This could be an English title, Chinese title (like "好饿的毛毛虫"="The Very Hungry Caterpillar"), abbreviation, or alternate name.
+If you recognize this book, use the REAL title, author and content.
+If not recognized, create age-appropriate content matching the title.
+Return ONLY valid JSON (no markdown):
+{"title":"Official English Title","author":"Author Name","zh_title":"中文书名","description":"2-3句中文简介，适合6-8岁","pages":[{"en":"Simple English sentence (max 12 words)","zh":"中文翻译"},{"en":"...","zh":"..."}]}
+Include 5-8 pages. Each English sentence must be simple (5-12 words). No complex vocabulary.`
   );
-  if (r) return { ...r, isAI:true, isApi:true, id:`ai-${Date.now()}`, pages: r.pages||[] };
+  if (r && r.title) return { ...r, isAI:true, isApi:true, id:`ai-${Date.now()}`, pages: r.pages||[], icon:'📖', palette:['#1a2a52','#2c4a7e','#FFD966'] };
   return null;
 }
 
@@ -464,12 +527,21 @@ function Ornaments() {
    8. 共用 UI 组件（布局原样不动）
    ══════════════════════════════════════════════ */
 function Header({ compact }) {
+  const cfg = checkApiConfig();
   return (
     <div style={{padding:compact?'16px 22px 14px':'26px 20px 22px',textAlign:'center',zIndex:2,position:'relative'}}>
       <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",color:'var(--gold)',fontSize:compact?30:38,letterSpacing:3,textShadow:'0 2px 16px rgba(255,217,102,.5), 0 0 32px rgba(255,206,92,.3)',lineHeight:1.1}}>
         星空阅读站 <span style={{fontSize:'.7em',color:'#FFE9A8'}}>✦</span>
       </div>
       <div style={{fontFamily:"'Fredoka',sans-serif",color:'rgba(245,237,214,.75)',fontSize:compact?12:13,fontWeight:500,letterSpacing:3,marginTop:4}}>STARRY · READING · STATION</div>
+      <div style={{display:'flex',justifyContent:'center',gap:8,marginTop:6}}>
+        <span style={{fontFamily:'Fredoka',fontSize:11,fontWeight:500,padding:'2px 8px',borderRadius:8,background:cfg.azure?'rgba(74,200,130,.2)':'rgba(255,80,80,.15)',color:cfg.azure?'#3a9a6a':'#c03333',border:`1px solid ${cfg.azure?'rgba(74,200,130,.3)':'rgba(255,80,80,.2)'}`}}>
+          {cfg.azure ? '🔊 语音 ✓' : '🔇 语音未配置'}
+        </span>
+        <span style={{fontFamily:'Fredoka',fontSize:11,fontWeight:500,padding:'2px 8px',borderRadius:8,background:cfg.openai?'rgba(74,200,130,.2)':'rgba(255,80,80,.15)',color:cfg.openai?'#3a9a6a':'#c03333',border:`1px solid ${cfg.openai?'rgba(74,200,130,.3)':'rgba(255,80,80,.2)'}`}}>
+          {cfg.openai ? '🤖 AI ✓' : '🤖 AI未配置'}
+        </span>
+      </div>
     </div>
   );
 }
@@ -573,17 +645,17 @@ function EqBars() {
 }
 
 /* ══════════════════════════════════════════════
-   9. 封面扫描弹窗（摄像头 + BarcodeDetector）
+   9. 封面扫描弹窗（AI 识图优先，条码备用）
    ══════════════════════════════════════════════ */
 function CameraScanner({ onFound, onClose }) {
   const videoRef = useRef();
-  const [phase,  setPhase]  = useState('starting'); // starting|ready|processing|error
-  const [result, setResult] = useState(null);
-  const [hint,   setHint]   = useState('将书的封面对准摄像头，然后拍照');
+  const [phase,    setPhase]   = useState('starting'); // starting|ready|processing|done|error
+  const [result,   setResult]  = useState(null);
+  const [hint,     setHint]    = useState('将书的封面对准摄像头，然后点拍照');
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
-    let stream, bcTimer, live = true;
-
+    let stream, live = true;
     navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
       .then(s => {
         if (!live) { s.getTracks().forEach(t=>t.stop()); return; }
@@ -591,51 +663,63 @@ function CameraScanner({ onFound, onClose }) {
         videoRef.current.srcObject = s;
         videoRef.current.play();
         setPhase('ready');
-        // 后台静默扫条形码
-        if ('BarcodeDetector' in window) {
-          const det = new BarcodeDetector({ formats:['ean_13','ean_8','code_128'] });
-          const loop = async () => {
-            if (!live || phase === 'processing') return;
-            try {
-              const codes = await det.detect(videoRef.current);
-              if (codes.length && live) {
-                setPhase('processing'); setHint('发现条形码，查找中…');
-                const books = await searchGoogleBooks(`isbn:${codes[0].rawValue}`);
-                if (!live) return;
-                if (books.length) { setResult(books[0]); return; }
-                setHint('条码未收录，请拍封面识别');
-                setPhase('ready');
-                return;
-              }
-            } catch {}
-            if (live) bcTimer = setTimeout(loop, 800);
-          };
-          bcTimer = setTimeout(loop, 1200);
-        }
       })
       .catch(e => {
         if (!live) return;
         setHint(e.name==='NotAllowedError' ? '请允许摄像头权限后重试' : '无法启动摄像头，请搜索书名');
         setPhase('error');
       });
-
-    return () => { live=false; clearTimeout(bcTimer); stream?.getTracks().forEach(t=>t.stop()); };
+    return () => { live=false; stream?.getTracks().forEach(t=>t.stop()); };
   }, []);
 
+  // 主逻辑：AI 识别封面
   const handleCapture = async () => {
     if (phase !== 'ready') return;
     if (!OPENAI_KEY || OPENAI_KEY.startsWith('__')) {
-      setHint('AI功能未配置，请检查 GitHub Secrets 中的 OPENAI_KEY'); setPhase('error'); return;
+      setHint('AI未配置，请先完成 GitHub Secrets 设置'); setPhase('error'); return;
     }
-    setPhase('processing'); setHint('AI 正在识别封面…');
+    setPhase('processing'); setHint('AI 正在识别封面，请稍候…');
     await speak('让我来认一认这本书～');
     const base64 = captureFrame(videoRef.current);
     const info = await identifyBookCover(base64);
     if (!info || !info.found || !info.title) {
-      setHint('未能识别，请重试或搜索书名'); setPhase('ready'); return;
+      setHint('未能识别到书名，请重试或调整光线角度'); setPhase('ready'); return;
     }
-    setResult({ title:info.title, author:info.author||'', zh_title:info.zh_title||'',
-      description:info.description||'', pages:info.pages||[], isAI:true, id:`ai-${Date.now()}` });
+    // 优先匹配本地书目
+    const local = BOOK_CATALOG.find(b =>
+      b.title.toLowerCase() === info.title.toLowerCase() ||
+      (b.zh_title && b.zh_title === info.zh_title) ||
+      (b.aliases || []).some(a => a.toLowerCase() === info.title.toLowerCase())
+    );
+    setResult(local
+      ? { ...local, isLocal:true }
+      : { title:info.title, author:info.author||'', zh_title:info.zh_title||'', description:info.description||'', pages:info.pages||[], isAI:true, id:`ai-${Date.now()}` }
+    );
+    setPhase('done');
+  };
+
+  // 备用：条码扫描（手动触发）
+  const handleBarcode = async () => {
+    if (!('BarcodeDetector' in window)) { setHint('当前设备不支持条码扫描'); return; }
+    if (scanning) return;
+    setScanning(true); setHint('对准条形码，自动识别…');
+    const det = new BarcodeDetector({ formats:['ean_13','ean_8','code_128'] });
+    let tries = 0;
+    const loop = async () => {
+      if (tries++ > 20) { setScanning(false); setHint('未扫到条码，请拍封面识别'); return; }
+      try {
+        const codes = await det.detect(videoRef.current);
+        if (codes.length) {
+          setScanning(false); setHint('找到条码，查询中…');
+          const books = await searchGoogleBooks(`isbn:${codes[0].rawValue}`);
+          if (books.length) { setResult(books[0]); setPhase('done'); }
+          else { setHint('条码未收录，请改用拍照识别'); }
+          return;
+        }
+      } catch {}
+      setTimeout(loop, 500);
+    };
+    loop();
   };
 
   const ov = { position:'fixed', inset:0, background:'rgba(10,20,48,.88)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', zIndex:80, display:'flex', alignItems:'center', justifyContent:'center', padding:20, animation:'fade-in .3s' };
@@ -644,44 +728,48 @@ function CameraScanner({ onFound, onClose }) {
   return (
     <div style={ov}><div style={bx}>
       <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:18,color:'var(--ink)',marginBottom:14}}>
-        {result ? `✅ 找到啦：${result.title}` : (phase==='starting'?'📷 启动摄像头…':'📸 拍封面识别绘本')}
+        {phase==='done' ? `✅ 找到啦：${result?.title}` : phase==='starting' ? '📷 启动摄像头…' : '📸 AI 识别绘本封面'}
       </div>
 
-      {!result && phase!=='error' && (
+      {phase!=='done' && phase!=='error' && (
         <div style={{position:'relative',borderRadius:16,overflow:'hidden',marginBottom:14,background:'#000',aspectRatio:'4/3'}}>
           <video ref={videoRef} style={{width:'100%',display:'block'}} muted playsInline/>
           {phase==='ready' && (
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
-              <div style={{width:'78%',height:'78%',border:'2px solid rgba(255,217,102,.75)',borderRadius:12}}/>
+              <div style={{width:'78%',height:'78%',border:'2px solid rgba(255,217,102,.75)',borderRadius:12,boxShadow:'0 0 0 9999px rgba(0,0,0,.25)'}}/>
+              <div style={{position:'absolute',bottom:10,left:0,right:0,textAlign:'center',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:12,color:'rgba(255,255,255,.85)'}}>将封面放入框内</div>
             </div>
           )}
           {phase==='processing' && (
-            <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.65)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
-              <div style={{width:40,height:40,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
+            <div style={{position:'absolute',inset:0,background:'rgba(10,20,48,.7)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+              <div style={{width:44,height:44,border:'4px solid var(--gold)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
               <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#fff'}}>{hint}</div>
             </div>
           )}
         </div>
       )}
 
-      {phase==='error' && !result && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#e05',marginBottom:14}}>{hint}</div>}
+      {phase==='error' && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'#c03',marginBottom:16,padding:'10px 14px',background:'rgba(200,0,0,.06)',borderRadius:12}}>{hint}</div>}
 
-      {phase==='ready' && !result && (
-        <>
-          <button onClick={handleCapture} style={{width:'100%',marginBottom:10,background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'14px',borderRadius:18,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
-            📸 拍照识别封面
+      {phase==='ready' && (
+        <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:12}}>
+          <button onClick={handleCapture} style={{width:'100%',background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'15px',borderRadius:18,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:17,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
+            📸 拍照识别封面（AI）
           </button>
-          <div style={{fontFamily:'Fredoka',fontSize:12,color:'var(--ink-soft)',marginBottom:10}}>{hint}</div>
-        </>
+          <button onClick={handleBarcode} style={{width:'100%',background:'rgba(255,255,255,.7)',color:'var(--ink-soft)',border:'1px dashed rgba(122,163,214,.5)',padding:'10px',borderRadius:14,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:13,cursor:'pointer'}}>
+            {scanning ? '🔍 扫码中…' : '📶 备用：扫描条形码'}
+          </button>
+          <div style={{fontFamily:'Fredoka',fontSize:12,color:'var(--ink-soft)'}}>{hint}</div>
+        </div>
       )}
 
-      {result && (
+      {phase==='done' && result && (
         <div style={{marginBottom:16}}>
-          {result.cover && <img src={result.cover} style={{height:110,borderRadius:10,boxShadow:'0 6px 16px rgba(0,0,0,.2)',marginBottom:10}} alt="cover"/>}
+          {result.cover && <img src={result.cover} style={{height:100,borderRadius:10,boxShadow:'0 6px 16px rgba(0,0,0,.2)',marginBottom:10}} alt="cover"/>}
           <div style={{fontFamily:"'Baloo 2',sans-serif",fontWeight:700,fontSize:16,color:'var(--ink)'}}>{result.title}</div>
           {result.zh_title && <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--ink-soft)',marginTop:2}}>{result.zh_title}</div>}
           {result.author && <div style={{fontFamily:'Fredoka',fontSize:13,color:'var(--ink-soft)',marginTop:2}}>{result.author}</div>}
-          {result.pages?.length > 0 && <div style={{fontFamily:'Fredoka',fontSize:12,color:'#4a7',marginTop:4}}>✓ 已获取 {result.pages.length} 页内容</div>}
+          {result.pages?.length > 0 && <div style={{fontFamily:'Fredoka',fontSize:12,color:'#3a8a4a',marginTop:4}}>✓ 已获取 {result.pages.length} 页内容</div>}
           <button onClick={()=>onFound(result)} style={{marginTop:14,width:'100%',background:'linear-gradient(165deg,#FFE9A8,#FFD966 50%,#F5B942)',color:'#5C3A1E',border:'none',padding:'13px',borderRadius:16,fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:'0 6px 14px rgba(245,185,66,.4)'}}>
             开始阅读 →
           </button>
@@ -740,18 +828,20 @@ function SearchBox({ query, setQuery, loading }) {
   );
 }
 
-// 本地书卡
-function LocalBookCard({ title, onClick }) {
-  const b = LOCAL_BOOKS[title];
+// 本地书卡（适配 BOOK_CATALOG 格式）
+function LocalBookCard({ book, onClick }) {
+  const palette = book.palette || ['#1a2a52','#2c4a7e','#FFD966'];
   return (
     <button onClick={onClick} style={{background:'transparent',border:'none',padding:0,cursor:'pointer',textAlign:'left'}}>
-      <div style={{width:'100%',aspectRatio:'3/4',borderRadius:14,background:`linear-gradient(165deg,${b.palette[0]} 0%,${b.palette[1]} 60%,${b.palette[2]} 100%)`,boxShadow:'0 8px 18px rgba(10,20,48,.35)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36,color:'#FFE9A8',border:'1px solid rgba(255,255,255,.3)',position:'relative',overflow:'hidden'}}>
+      <div style={{width:'100%',aspectRatio:'3/4',borderRadius:14,background:`linear-gradient(165deg,${palette[0]} 0%,${palette[1]} 60%,${palette[2]} 100%)`,boxShadow:'0 8px 18px rgba(10,20,48,.35)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36,color:'#FFE9A8',border:'1px solid rgba(255,255,255,.3)',position:'relative',overflow:'hidden'}}>
         <div style={{position:'absolute',top:10,left:12,fontSize:8,color:'#FFE9A8'}}>✦</div>
         <div style={{position:'absolute',top:22,right:14,fontSize:6,color:'#FFE9A8'}}>✦</div>
         <div style={{position:'absolute',bottom:14,left:18,fontSize:6,color:'#FFE9A8'}}>✦</div>
-        {b.icon}
+        {book.icon || '📖'}
       </div>
-      <div style={{marginTop:6,fontFamily:'Fredoka',fontWeight:600,fontSize:12,color:'var(--cream)',lineHeight:1.25,textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>{title}</div>
+      <div style={{marginTop:6,fontFamily:'Fredoka',fontWeight:600,fontSize:12,color:'var(--cream)',lineHeight:1.25,textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>
+        {book.title.length>18 ? book.title.slice(0,16)+'…' : book.title}
+      </div>
     </button>
   );
 }
@@ -774,43 +864,60 @@ function ApiBookCard({ book, onClick }) {
 }
 
 function HomeScreen({ isLandscape, onPickBook, onOpenCamera, query, setQuery, starProps }) {
-  const [apiResults, setApiResults] = useState([]);
-  const [loading,    setLoading]    = useState(false);
+  const [extraResults, setExtraResults] = useState([]); // Google Books + GPT 结果
+  const [loading,      setLoading]      = useState(false);
+  const [aiLabel,      setAiLabel]      = useState('');
   const timerRef = useRef();
 
-  // 防抖搜索：本地 → Google Books → GPT-4o AI兜底
+  // 搜索流程：1.本地模糊（即时） 2.Google Books 3.GPT-4o 兜底
   useEffect(() => {
     clearTimeout(timerRef.current);
-    if (!query.trim()) { setApiResults([]); return; }
+    setExtraResults([]); setAiLabel('');
+    if (!query.trim()) { setLoading(false); return; }
     timerRef.current = setTimeout(async () => {
       setLoading(true);
+      // 先查 Google Books
       let res = await searchGoogleBooks(query.trim());
-      if (res.length === 0) {
-        const aiBook = await searchBookByAI(query.trim());
-        if (aiBook) res = [aiBook];
+      if (res.length > 0) {
+        setExtraResults(res); setLoading(false); return;
       }
-      setApiResults(res);
+      // Google Books 无结果 → GPT-4o 语义识别
+      if (OPENAI_KEY && !OPENAI_KEY.startsWith('__')) {
+        setAiLabel('AI 正在检索…');
+        const aiBook = await searchBookByAI(query.trim());
+        if (aiBook) { setExtraResults([aiBook]); setAiLabel('AI 生成内容'); }
+        else setAiLabel('');
+      }
       setLoading(false);
-    }, 800);
+    }, 600);
     return () => clearTimeout(timerRef.current);
   }, [query]);
 
+  // 本地模糊搜索（含别名、中文名，即时响应）
   const localMatches = query.trim()
-    ? Object.keys(LOCAL_BOOKS).filter(t => t.toLowerCase().includes(query.toLowerCase()))
-    : Object.keys(LOCAL_BOOKS);
+    ? searchLocalCatalog(query.trim())
+    : BOOK_CATALOG;
 
-  const hasResults = localMatches.length > 0 || apiResults.length > 0;
+  // 去重：本地已有的不在 API 结果中重复展示
+  const localTitles = new Set(localMatches.map(b => b.title.toLowerCase()));
+  const deduped = extraResults.filter(b => !localTitles.has(b.title.toLowerCase()));
+
+  const totalCount = localMatches.length + deduped.length;
+  const hasResults = totalCount > 0;
 
   const bookGrid = (
     <div>
-      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--cream)',margin:'6px 4px 8px',textShadow:'0 1px 3px rgba(0,0,0,.4)',letterSpacing:1}}>
-        {query.trim() ? (loading ? '搜索中…' : `共找到 ${localMatches.length + apiResults.length} 本`) : '今夜书单 · TONIGHT'}
+      <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--cream)',margin:'6px 4px 8px',textShadow:'0 1px 3px rgba(0,0,0,.4)',letterSpacing:1,display:'flex',alignItems:'center',gap:8}}>
+        {query.trim()
+          ? (loading ? '搜索中…' : `找到 ${totalCount} 本`)
+          : `精选书单 · ${BOOK_CATALOG.length} 本`}
+        {aiLabel && <span style={{fontFamily:'Fredoka',fontSize:11,color:'var(--gold-deep)',background:'rgba(255,217,102,.15)',padding:'2px 8px',borderRadius:8}}>{aiLabel}</span>}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
-        {localMatches.map(t=><LocalBookCard key={t} title={t} onClick={()=>onPickBook({local:true,title:t})}/>)}
-        {apiResults.map(b=><ApiBookCard key={b.id} book={b} onClick={()=>onPickBook({local:false,...b})}/>)}
+        {localMatches.map(b=><LocalBookCard key={b.title} book={b} onClick={()=>onPickBook({...b, local:true})}/>)}
+        {deduped.map(b=><ApiBookCard key={b.id} book={b} onClick={()=>onPickBook({local:false,...b})}/>)}
         {query.trim() && !hasResults && !loading && (
-          <div style={{gridColumn:'span 3',textAlign:'center',padding:'20px 0',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'rgba(245,237,214,.6)'}}>未找到相关绘本</div>
+          <div style={{gridColumn:'span 3',textAlign:'center',padding:'20px 0',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'rgba(245,237,214,.6)'}}>未找到相关绘本，请尝试英文名</div>
         )}
       </div>
     </div>
@@ -1055,7 +1162,7 @@ function PageScanner({ onPageScanned, onClose }) {
 }
 
 function ReadingScreen({ isLandscape, bookData, onBack, onFinish, starProps }) {
-  const local    = bookData.local ? LOCAL_BOOKS[bookData.title] : null;
+  const local    = bookData.local ? (CATALOG_MAP.get(bookData.title) || bookData) : null;
   const initPages = (() => {
     const base = local?.pages || (bookData.pages?.length ? bookData.pages : [{en:'', zh:'', desc:bookData.description||''}]);
     const saved = loadBookPages(bookData.title);
@@ -1279,8 +1386,11 @@ function App() {
   const [celebrate,   setCelebrate]  = useState(false);
   const [showCamera,  setShowCamera] = useState(false);
 
-  // 预加载语音
-  useEffect(() => { loadVoices(); }, []);
+  // 启动初始化：预加载语音 + 清理无效缓存
+  useEffect(() => {
+    loadVoices();
+    clearInvalidCache();
+  }, []);
 
   // 每次 done 改变时持久化
   useEffect(() => { saveStars(done); }, [done]);
@@ -1299,14 +1409,19 @@ function App() {
     setCelebrate(true);
   };
 
-  const handleCameraFound = async (apiBook) => {
+  const handleCameraFound = async (book) => {
     setShowCamera(false);
-    // 如果是我们库里有的书，用本地数据
-    const localMatch = Object.keys(LOCAL_BOOKS).find(t => t.toLowerCase().includes(apiBook.title.toLowerCase().slice(0,8)));
-    if (localMatch) {
-      pickBook({ local:true, title:localMatch });
+    // 如果已匹配到本地书目，直接用
+    if (book.isLocal) {
+      pickBook({ ...book, local:true });
     } else {
-      pickBook({ local:false, ...apiBook });
+      // 再次尝试本地匹配（按 title 精确/前缀）
+      const local = BOOK_CATALOG.find(b =>
+        b.title.toLowerCase() === (book.title||'').toLowerCase() ||
+        (b.zh_title && b.zh_title === book.zh_title) ||
+        (b.aliases||[]).some(a => a.toLowerCase() === (book.title||'').toLowerCase())
+      );
+      pickBook(local ? { ...local, local:true } : { ...book, local:false });
     }
   };
 
