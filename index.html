@@ -343,7 +343,7 @@ function captureFrame(videoEl, quality=0.85) {
 }
 
 async function _gptVision(base64, prompt, maxTokens=900) {
-  if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') return null;
+  if (!OPENAI_KEY || OPENAI_KEY.startsWith('__')) return null;
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
@@ -365,7 +365,7 @@ async function _gptVision(base64, prompt, maxTokens=900) {
 }
 
 async function _gptText(prompt, maxTokens=1000) {
-  if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') return null;
+  if (!OPENAI_KEY || OPENAI_KEY.startsWith('__')) return null;
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method:'POST',
@@ -624,7 +624,7 @@ function CameraScanner({ onFound, onClose }) {
 
   const handleCapture = async () => {
     if (phase !== 'ready') return;
-    if (!OPENAI_KEY || OPENAI_KEY === '__OPENAI_KEY__') {
+    if (!OPENAI_KEY || OPENAI_KEY.startsWith('__')) {
       setHint('AI功能未配置，请检查 GitHub Secrets 中的 OPENAI_KEY'); setPhase('error'); return;
     }
     setPhase('processing'); setHint('AI 正在识别封面…');
