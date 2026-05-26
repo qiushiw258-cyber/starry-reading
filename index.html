@@ -348,8 +348,7 @@ function searchLocalCatalog(q) {
 async function searchGoogleBooks(q) {
   try {
     // 中文书名加 intitle: 提高精度
-    const query = /[一-鿿]/.test(q) ? `intitle:${q}` : q;
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&printType=books&langRestrict=en`;
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=8&printType=books`;
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
