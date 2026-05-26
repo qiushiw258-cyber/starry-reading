@@ -468,19 +468,35 @@ async function scanPagePhoto(base64) {
   );
 }
 
-// AI书名搜索 → 语义理解中英文书名，返回真实内容
+// AI书名搜索 — 主搜索通道，支持中英文/简称/俗称
 async function searchBookByAI(title) {
   const r = await _gptText(
-    `You are a children's picture book database for a reading app (ages 4-8).
-The user searched for: "${title}"
-This could be an English title, Chinese title (like "好饿的毛毛虫"="The Very Hungry Caterpillar"), abbreviation, or alternate name.
-If you recognize this book, use the REAL title, author and content.
-If not recognized, create age-appropriate content matching the title.
-Return ONLY valid JSON (no markdown):
-{"title":"Official English Title","author":"Author Name","zh_title":"中文书名","description":"2-3句中文简介，适合6-8岁","pages":[{"en":"Simple English sentence (max 12 words)","zh":"中文翻译"},{"en":"...","zh":"..."}]}
-Include 5-8 pages. Each English sentence must be simple (5-12 words). No complex vocabulary.`
+    `You are a children's picture book assistant for a reading app (target age 4-8 years old).
+User searched: "${title}"
+
+Rules:
+1. This may be English, Chinese (e.g. "好饿的毛毛虫"="The Very Hungry Caterpillar"), nickname, abbreviation, or series name.
+2. If you recognize the book, return REAL content from the actual book.
+3. If you don't recognize it, create 5-6 short pages of age-appropriate content that fits the title theme.
+4. ALWAYS return a result — never return empty pages.
+5. Each English page: 1-2 simple sentences, max 12 words each, vocabulary suitable for 5-7 year olds.
+
+Return ONLY this JSON (no markdown, no code blocks):
+{
+  "title": "Official English title (or best English translation)",
+  "author": "Author name or empty string",
+  "zh_title": "中文书名",
+  "description": "2句中文简介",
+  "pages": [
+    {"en": "Simple English text for this page.", "zh": "中文翻译"},
+    {"en": "...", "zh": "..."}
+  ]
+}`,
+    1200
   );
-  if (r && r.title) return { ...r, isAI:true, isApi:true, id:`ai-${Date.now()}`, pages: r.pages||[], icon:'📖', palette:['#1a2a52','#2c4a7e','#FFD966'] };
+  if (r && r.title && r.pages?.length > 0) {
+    return { ...r, isAI:true, isApi:true, id:`ai-${Date.now()}`, pages:r.pages, icon:'📖', palette:['#1a2a52','#2c4a7e','#FFD966'] };
+  }
   return null;
 }
 
@@ -877,55 +893,67 @@ function HomeScreen({ isLandscape, onPickBook, onOpenCamera, query, setQuery, st
   const [aiLabel,      setAiLabel]      = useState('');
   const timerRef = useRef();
 
-  // 搜索流程：1.本地模糊（即时） 2.Google Books 3.GPT-4o 兜底
+  // 搜索流程：GPT-4o 优先（并行 Google Books 补封面）
   useEffect(() => {
     clearTimeout(timerRef.current);
     setExtraResults([]); setAiLabel('');
     if (!query.trim()) { setLoading(false); return; }
     timerRef.current = setTimeout(async () => {
       setLoading(true);
-      // 先查 Google Books
-      let res = await searchGoogleBooks(query.trim());
-      if (res.length > 0) {
-        setExtraResults(res); setLoading(false); return;
+      const hasAI = OPENAI_KEY && !OPENAI_KEY.startsWith('__');
+      if (hasAI) setAiLabel('AI 识别中…');
+
+      // GPT-4o + Google Books 并行
+      const [aiBook, googleBooks] = await Promise.all([
+        hasAI ? searchBookByAI(query.trim()) : Promise.resolve(null),
+        searchGoogleBooks(query.trim()),
+      ]);
+
+      const results = [];
+      if (aiBook) {
+        // 用 Google Books 补封面图
+        const gMatch = googleBooks.find(g =>
+          g.title.toLowerCase().replace(/[^a-z]/g,'').includes(
+            aiBook.title.toLowerCase().replace(/[^a-z]/g,'').slice(0, 8)
+          )
+        );
+        results.push({ ...aiBook, cover: gMatch?.cover || aiBook.cover || '' });
+        setAiLabel('');
       }
-      // Google Books 无结果 → GPT-4o 语义识别
-      if (OPENAI_KEY && !OPENAI_KEY.startsWith('__')) {
-        setAiLabel('AI 正在检索…');
-        const aiBook = await searchBookByAI(query.trim());
-        if (aiBook) { setExtraResults([aiBook]); setAiLabel('AI 生成内容'); }
-        else setAiLabel('');
-      }
+      // 把 Google Books 里 AI 没覆盖的也加进来（补充封面来源）
+      const usedTitle = aiBook?.title?.toLowerCase().replace(/[^a-z]/g,'') || '';
+      googleBooks
+        .filter(g => !usedTitle || !g.title.toLowerCase().replace(/[^a-z]/g,'').includes(usedTitle.slice(0,8)))
+        .slice(0, 3)
+        .forEach(g => results.push(g));
+
+      if (results.length === 0) setAiLabel(hasAI ? '未找到，请换个关键词试试' : 'AI未配置，仅显示本地书目');
+      setExtraResults(results);
       setLoading(false);
-    }, 600);
+    }, 500);
     return () => clearTimeout(timerRef.current);
   }, [query]);
 
-  // 本地模糊搜索（含别名、中文名，即时响应）
-  const localMatches = query.trim()
-    ? searchLocalCatalog(query.trim())
-    : BOOK_CATALOG;
-
-  // 去重：本地已有的不在 API 结果中重复展示
-  const localTitles = new Set(localMatches.map(b => b.title.toLowerCase()));
-  const deduped = extraResults.filter(b => !localTitles.has(b.title.toLowerCase()));
-
-  const totalCount = localMatches.length + deduped.length;
-  const hasResults = totalCount > 0;
+  // 搜索时只显示 AI+网络结果；无搜索时显示本地精选
+  const showingSearch = !!query.trim();
+  const localMatches = showingSearch ? [] : BOOK_CATALOG;
+  const hasResults = showingSearch ? extraResults.length > 0 : true;
 
   const bookGrid = (
     <div>
       <div style={{fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'var(--cream)',margin:'6px 4px 8px',textShadow:'0 1px 3px rgba(0,0,0,.4)',letterSpacing:1,display:'flex',alignItems:'center',gap:8}}>
-        {query.trim()
-          ? (loading ? '搜索中…' : `找到 ${totalCount} 本`)
+        {showingSearch
+          ? (loading ? 'AI 搜索中…' : `找到 ${extraResults.length} 本`)
           : `精选书单 · ${BOOK_CATALOG.length} 本`}
-        {aiLabel && <span style={{fontFamily:'Fredoka',fontSize:11,color:'var(--gold-deep)',background:'rgba(255,217,102,.15)',padding:'2px 8px',borderRadius:8}}>{aiLabel}</span>}
+        {aiLabel && <span style={{fontFamily:'Fredoka',fontSize:11,color:aiLabel.includes('未找到')||aiLabel.includes('未配置')?'#c03333':'var(--gold-deep)',background:aiLabel.includes('未找到')||aiLabel.includes('未配置')?'rgba(200,0,0,.08)':'rgba(255,217,102,.15)',padding:'2px 8px',borderRadius:8}}>{aiLabel}</span>}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
         {localMatches.map(b=><LocalBookCard key={b.title} book={b} onClick={()=>onPickBook({...b, local:true})}/>)}
-        {deduped.map(b=><ApiBookCard key={b.id} book={b} onClick={()=>onPickBook({local:false,...b})}/>)}
-        {query.trim() && !hasResults && !loading && (
-          <div style={{gridColumn:'span 3',textAlign:'center',padding:'20px 0',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'rgba(245,237,214,.6)'}}>未找到相关绘本，请尝试英文名</div>
+        {extraResults.map(b=><ApiBookCard key={b.id||b.title} book={b} onClick={()=>onPickBook({local:false,...b})}/>)}
+        {showingSearch && !hasResults && !loading && (
+          <div style={{gridColumn:'span 3',textAlign:'center',padding:'20px 0',fontFamily:"'ZCOOL KuaiLe',sans-serif",fontSize:14,color:'rgba(245,237,214,.6)'}}>
+            未找到，请换个关键词试试
+          </div>
         )}
       </div>
     </div>
